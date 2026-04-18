@@ -73,5 +73,7 @@ async def rebuild_upcoming_async() -> None:
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
     scheduler.add_job(dispatch_pending, "interval", minutes=1, id="dispatch_pending")
-    scheduler.add_job(rebuild_upcoming_async, "cron", hour=3, minute=0, id="rebuild_upcoming")
+    scheduler.add_job(
+        rebuild_upcoming_async, "cron", hour=3, minute=0, id="rebuild_upcoming"
+    )
     return scheduler
