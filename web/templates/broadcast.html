@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}공지 보내기 — KinKeeper{% endblock %}
+{% block content %}
+<h2>공지 보내기</h2>
+
+<form method="post">
+  <label>
+    대상 구성원 (복수 선택)
+    <select name="member_ids" multiple required>
+      {% for m in members %}
+      <option value="{{ m.id }}" {{ "disabled" if not m.telegram_user_id }}>
+        {{ m.name }}{{ " (텔레그램 미등록)" if not m.telegram_user_id }}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    메시지
+    <textarea name="message" rows="5" required maxlength="4096"></textarea>
+  </label>
+  <button type="submit">보내기</button>
+</form>
+
+{% if result %}
+<hr>
+<p class="{{ 'success' if result.ok else 'danger' }}">{{ result.msg }}</p>
+{% endif %}
+{% endblock %}

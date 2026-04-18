@@ -82,8 +82,9 @@ class ScheduledNotification(Base):
     __tablename__ = "scheduled_notifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    rule_id: Mapped[int] = mapped_column(
-        ForeignKey("reminder_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    # 수동 공지는 rule 없이 발송되므로 nullable
+    rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reminder_rules.id", ondelete="CASCADE"), nullable=True, index=True
     )
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True

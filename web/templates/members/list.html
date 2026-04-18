@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}가족 구성원 — KinKeeper{% endblock %}
+{% block content %}
+<h2>가족 구성원</h2>
+<a href="/members/new" role="button">+ 추가</a>
+
+<table>
+  <thead>
+    <tr>
+      <th>이름</th><th>텔레그램 ID</th><th>생일 (양력)</th><th>상태</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in members %}
+    <tr>
+      <td>{{ m.name }}</td>
+      <td>{{ m.telegram_user_id or "—" }}</td>
+      <td>{{ m.birthday_solar.strftime("%m/%d") if m.birthday_solar else "—" }}</td>
+      <td>{{ "활성" if m.active else "비활성" }}</td>
+      <td>
+        <a href="/members/{{ m.id }}/edit">수정</a> |
+        <a href="/members/{{ m.id }}/delete"
+           hx-delete="/members/{{ m.id }}"
+           hx-confirm="정말 삭제하시겠습니까?"
+           hx-target="closest tr"
+           hx-swap="outerHTML"
+           class="danger">삭제</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">등록된 구성원이 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
