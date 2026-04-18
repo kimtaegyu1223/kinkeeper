@@ -5,6 +5,7 @@ import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
+from shared.config import settings
 from shared.db import get_session
 from shared.enums import NotificationStatus
 from shared.models import ScheduledNotification
@@ -39,6 +40,14 @@ def _mark_sent(notification_id: int, success: bool, error: str | None = None) ->
         row.error = error
 
 
+def _do_rebuild() -> None:
+    from shared.generators import rebuild_upcoming
+
+    with get_session() as session:
+        rebuild_upcoming(session, horizon_days=settings.schedule_horizon_days)
+    log.info("알림 예정 재생성 완료", horizon_days=settings.schedule_horizon_days)
+
+
 async def dispatch_pending() -> None:
     """1분마다 실행 — pending 알림을 텔레그램으로 발송."""
     pending = await asyncio.to_thread(_fetch_pending)
@@ -56,8 +65,15 @@ async def dispatch_pending() -> None:
         )
 
 
+async def rebuild_upcoming_async() -> None:
+    """매일 새벽 3시 실행 — 활성 규칙에서 예정 알림 재생성."""
+    await asyncio.to_thread(_do_rebuild)
+
+
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
-    # 1분마다 pending 알림 발송
     scheduler.add_job(dispatch_pending, "interval", minutes=1, id="dispatch_pending")
+    scheduler.add_job(
+        rebuild_upcoming_async, "cron", hour=3, minute=0, id="rebuild_upcoming"
+    )
     return scheduler
