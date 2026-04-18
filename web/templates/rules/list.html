@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}알림 규칙 — KinKeeper{% endblock %}
+{% block content %}
+<h2>알림 규칙</h2>
+<a href="/rules/new" role="button">+ 규칙 추가</a>
+
+<table>
+  <thead>
+    <tr>
+      <th>제목</th><th>유형</th><th>리드타임(일)</th><th>상태</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rules %}
+    <tr>
+      <td>{{ r.title }}</td>
+      <td>{{ r.type }}</td>
+      <td>{{ r.lead_times_days | join(", ") }}</td>
+      <td>{{ "활성" if r.active else "비활성" }}</td>
+      <td>
+        <a href="/rules/{{ r.id }}/edit">수정</a> |
+        <a href="#"
+           hx-delete="/rules/{{ r.id }}"
+           hx-confirm="정말 삭제하시겠습니까?"
+           hx-target="closest tr"
+           hx-swap="outerHTML"
+           class="danger">삭제</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">등록된 규칙이 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}다이어트 기록 — KinKeeper{% endblock %}
+{% block content %}
+<h2>다이어트 기록</h2>
+
+{% for member_name, logs in by_member.items() %}
+<details open>
+  <summary><strong>{{ member_name }}</strong></summary>
+  <table>
+    <thead>
+      <tr><th>날짜</th><th>몸무게(kg)</th><th>메모</th></tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>{{ log.recorded_at.strftime("%Y-%m-%d") }}</td>
+        <td>{{ log.weight_kg }}</td>
+        <td>{{ log.note or "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">기록 없음</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% else %}
+<p>기록이 없습니다.</p>
+{% endfor %}
+{% endblock %}

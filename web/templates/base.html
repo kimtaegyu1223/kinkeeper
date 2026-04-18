@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}KinKeeper{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <style>
+      nav { margin-bottom: 1rem; }
+      .danger { color: var(--pico-del-color); }
+      .success { color: var(--pico-ins-color); }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <nav>
+        <ul>
+          <li><strong>👨‍👩‍👧‍👦 KinKeeper</strong></li>
+        </ul>
+        <ul>
+          <li><a href="/members">가족 구성원</a></li>
+          <li><a href="/rules">알림 규칙</a></li>
+          <li><a href="/broadcast">공지 보내기</a></li>
+          <li><a href="/diet">다이어트</a></li>
+        </ul>
+      </nav>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          {% for msg in messages %}
+            <div class="success">{{ msg }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

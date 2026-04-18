@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ "구성원 수정" if member else "구성원 추가" }} — KinKeeper{% endblock %}
+{% block content %}
+<h2>{{ "구성원 수정" if member else "구성원 추가" }}</h2>
+
+<form method="post">
+  <label>
+    이름
+    <input name="name" value="{{ member.name if member else '' }}" required maxlength="50" />
+  </label>
+  <label>
+    텔레그램 사용자 ID
+    <input name="telegram_user_id" type="number"
+           value="{{ member.telegram_user_id if member and member.telegram_user_id else '' }}"
+           placeholder="없으면 비워두세요" />
+    <small>봇에서 /start 보내면 관리자에게 ID가 표시됩니다.</small>
+  </label>
+  <label>
+    생일 (양력)
+    <input name="birthday_solar" type="date"
+           value="{{ member.birthday_solar.isoformat() if member and member.birthday_solar else '' }}" />
+  </label>
+  <label>
+    활성
+    <input name="active" type="checkbox"
+           {{ "checked" if not member or member.active else "" }} />
+  </label>
+  <button type="submit">저장</button>
+  <a href="/members" role="button" class="secondary">취소</a>
+</form>
+{% endblock %}
