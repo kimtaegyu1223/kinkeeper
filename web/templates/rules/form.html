@@ -3,39 +3,261 @@
 {% block content %}
 <h2>{{ "규칙 수정" if rule else "규칙 추가" }}</h2>
 
-<form method="post">
+<form method="post" id="rule-form">
+
+  {# ── 공통 필드 ── #}
   <label>
     유형
-    <select name="type" required>
-      <option value="birthday"     {{ "selected" if rule and rule.type == "birthday" }}>생일</option>
-      <option value="holiday"      {{ "selected" if rule and rule.type == "holiday" }}>명절</option>
-      <option value="health_check" {{ "selected" if rule and rule.type == "health_check" }}>건강검진</option>
-      <option value="diet_report"  {{ "selected" if rule and rule.type == "diet_report" }}>다이어트 리포트</option>
-      <option value="custom"       {{ "selected" if rule and rule.type == "custom" }}>커스텀</option>
+    <select name="type" id="rule-type" onchange="showSection(this.value)" required>
+      <option value="">선택하세요</option>
+      <option value="birthday"     {{ "selected" if rule and rule.type.value == "birthday" }}>🎂 생일</option>
+      <option value="holiday"      {{ "selected" if rule and rule.type.value == "holiday" }}>🎊 명절</option>
+      <option value="health_check" {{ "selected" if rule and rule.type.value == "health_check" }}>🏥 건강검진</option>
+      <option value="diet_report"  {{ "selected" if rule and rule.type.value == "diet_report" }}>⚖️ 다이어트 리포트</option>
+      <option value="custom"       {{ "selected" if rule and rule.type.value == "custom" }}>📅 커스텀</option>
     </select>
   </label>
+
   <label>
-    제목
-    <input name="title" value="{{ rule.title if rule else '' }}" required maxlength="200" />
+    규칙 이름
+    <input name="title" value="{{ rule.title if rule else '' }}" required maxlength="200"
+           placeholder="예: 홍길동 생일 알림" />
   </label>
-  <label>
-    리드타임 (며칠 전, 쉼표로 구분)
-    <input name="lead_times_days"
-           value="{{ rule.lead_times_days | join(', ') if rule else '14, 7, 3, 1' }}"
-           placeholder="예: 14, 7, 3, 1" />
-    <small>생일·명절 등에서 몇 일 전에 알림을 보낼지 지정합니다. 모든 알림은 그룹채널에 발송됩니다.</small>
-  </label>
-  <label>
-    추가 설정 (JSON)
-    <textarea name="config" rows="4">{{ rule.config | tojson(indent=2) if rule else '{}' }}</textarea>
-    <small>
-      생일: {"member_id": 1}<br>
-      명절: {"name": "추석", "lunar_month": 8, "lunar_day": 15}<br>
-      건강검진: {"member_id": 1, "period": "yearly", "anchor_date": "2026-03-15"}<br>
-      다이어트: {"cadence": "weekly", "weekday": 0, "hour": 9}<br>
-      커스텀: {"run_at": "2026-12-01T10:00:00+09:00"}
-    </small>
-  </label>
+
+  {# ── 생일 ── #}
+  <div id="section-birthday" class="type-section" style="display:none">
+    <fieldset>
+      <legend>🎂 생일 알림 설정</legend>
+      <label>
+        대상 구성원
+        <select name="birthday_member_id">
+          <option value="">선택하세요</option>
+          {% for m in members %}
+          <option value="{{ m.id }}"
+            {{ "selected" if rule and rule.config.get('member_id') == m.id }}>
+            {{ m.name }}
+            {% if m.birthday_solar %}(양력 {{ m.birthday_solar.strftime('%m/%d') }}){% endif %}
+            {% if m.birthday_lunar %}(음력 {{ m.birthday_lunar.month }}월{{ m.birthday_lunar.day }}일){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        생일 기준
+        <select name="birthday_use_lunar">
+          <option value="0" {{ "selected" if rule and not rule.config.get('use_lunar') }}>양력</option>
+          <option value="1" {{ "selected" if rule and rule.config.get('use_lunar') }}>음력</option>
+        </select>
+      </label>
+      <label>
+        알림 시각
+        <input type="number" name="birthday_hour" min="0" max="23"
+               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'birthday' else 9 }}" />
+        <small>시 (0~23, 기본 9시)</small>
+      </label>
+      <label>
+        며칠 전에 알릴지 (쉼표로 구분)
+        <input name="birthday_lead_times"
+               value="{{ rule.lead_times_days | join(', ') if rule and rule.type.value == 'birthday' else '14, 7, 3, 1, 0' }}"
+               placeholder="예: 14, 7, 3, 1, 0" />
+        <small>0 = 당일 알림. 예: 14,7,3,1,0 → 2주/1주/3일/1일 전 + 당일</small>
+      </label>
+    </fieldset>
+  </div>
+
+  {# ── 명절 ── #}
+  <div id="section-holiday" class="type-section" style="display:none">
+    <fieldset>
+      <legend>🎊 명절 알림 설정</legend>
+      <label>
+        명절 이름
+        <input name="holiday_name"
+               value="{{ rule.config.get('name', '') if rule and rule.type.value == 'holiday' else '' }}"
+               placeholder="예: 추석, 설날" />
+      </label>
+      <label>
+        음력 월
+        <select name="holiday_lunar_month">
+          {% for m in range(1, 13) %}
+          <option value="{{ m }}"
+            {{ "selected" if rule and rule.type.value == 'holiday' and rule.config.get('lunar_month') == m }}>
+            {{ m }}월
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        음력 일
+        <select name="holiday_lunar_day">
+          {% for d in range(1, 31) %}
+          <option value="{{ d }}"
+            {{ "selected" if rule and rule.type.value == 'holiday' and rule.config.get('lunar_day') == d }}>
+            {{ d }}일
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        알림 시각
+        <input type="number" name="holiday_hour" min="0" max="23"
+               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'holiday' else 9 }}" />
+        <small>시 (0~23, 기본 9시)</small>
+      </label>
+      <label>
+        며칠 전에 알릴지 (쉼표로 구분)
+        <input name="holiday_lead_times"
+               value="{{ rule.lead_times_days | join(', ') if rule and rule.type.value == 'holiday' else '30, 7, 2, 0' }}"
+               placeholder="예: 30, 7, 2, 0" />
+        <small>0 = 당일. 예: 30,7,2,0 → 한달 전/1주 전/2일 전(교통편 예매)/당일</small>
+      </label>
+    </fieldset>
+  </div>
+
+  {# ── 건강검진 ── #}
+  <div id="section-health_check" class="type-section" style="display:none">
+    <fieldset>
+      <legend>🏥 건강검진 알림 설정</legend>
+      <label>
+        대상 구성원
+        <select name="health_member_id">
+          <option value="">선택하세요</option>
+          {% for m in members %}
+          <option value="{{ m.id }}"
+            {{ "selected" if rule and rule.config.get('member_id') == m.id }}>
+            {{ m.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        주기
+        <select name="health_period">
+          <option value="yearly"   {{ "selected" if rule and rule.config.get('period') == 'yearly' }}>매년</option>
+          <option value="biannual" {{ "selected" if rule and rule.config.get('period') == 'biannual' }}>반기(6개월)</option>
+        </select>
+      </label>
+      <label>
+        기준 날짜 (가장 최근 검진일)
+        <input type="date" name="health_anchor_date"
+               value="{{ rule.config.get('anchor_date', '') if rule and rule.type.value == 'health_check' else '' }}" />
+        <small>이 날짜로부터 주기만큼 후에 알림을 보냅니다.</small>
+      </label>
+      <label>
+        알림 시각
+        <input type="number" name="health_hour" min="0" max="23"
+               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'health_check' else 9 }}" />
+        <small>시 (0~23, 기본 9시)</small>
+      </label>
+      <label>
+        며칠 전에 알릴지
+        <input name="health_lead_times"
+               value="{{ rule.lead_times_days | join(', ') if rule and rule.type.value == 'health_check' else '30, 7' }}"
+               placeholder="예: 30, 7" />
+      </label>
+    </fieldset>
+  </div>
+
+  {# ── 다이어트 리포트 ── #}
+  <div id="section-diet_report" class="type-section" style="display:none">
+    <fieldset>
+      <legend>⚖️ 다이어트 리포트 설정</legend>
+      <label>
+        발송 주기
+        <select name="diet_cadence">
+          <option value="weekly"  {{ "selected" if rule and rule.config.get('cadence') == 'weekly' }}>매주</option>
+          <option value="monthly" {{ "selected" if rule and rule.config.get('cadence') == 'monthly' }}>매월</option>
+        </select>
+      </label>
+      <label>
+        요일 (매주인 경우)
+        <select name="diet_weekday">
+          {% set days = ['월', '화', '수', '목', '금', '토', '일'] %}
+          {% for dn in days %}
+          <option value="{{ loop.index0 }}"
+            {{ "selected" if rule and rule.config.get('weekday', 0) == loop.index0 }}>
+            {{ dn }}요일
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        발송 시각
+        <input type="number" name="diet_hour" min="0" max="23"
+               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'diet_report' else 9 }}" />
+        <small>시 (0~23, 기본 9시)</small>
+      </label>
+    </fieldset>
+  </div>
+
+  {# ── 커스텀 ── #}
+  <div id="section-custom" class="type-section" style="display:none">
+    <fieldset>
+      <legend>📅 커스텀 일정 설정</legend>
+      <label>
+        반복 여부
+        <select name="custom_repeat" id="custom-repeat" onchange="toggleCustomDate()">
+          <option value="once"   {{ "selected" if rule and not rule.config.get('repeat') }}>1회성</option>
+          <option value="yearly" {{ "selected" if rule and rule.config.get('repeat') == 'yearly' }}>매년 반복</option>
+        </select>
+      </label>
+
+      {# 1회성: 날짜+시각 직접 지정 #}
+      <div id="custom-once">
+        <label>
+          날짜 및 시각
+          <input type="datetime-local" name="custom_run_at"
+                 value="{{ rule.config.get('run_at', '')[:16] if rule and rule.type.value == 'custom' and not rule.config.get('repeat') else '' }}" />
+        </label>
+      </div>
+
+      {# 매년 반복: 월/일 + 시각 #}
+      <div id="custom-yearly" style="display:none">
+        <label>
+          매년 알림 월
+          <select name="custom_month">
+            {% for m in range(1, 13) %}
+            <option value="{{ m }}"
+              {{ "selected" if rule and rule.type.value == 'custom' and rule.config.get('month') == m }}>
+              {{ m }}월
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          매년 알림 일
+          <select name="custom_day">
+            {% for d in range(1, 32) %}
+            <option value="{{ d }}"
+              {{ "selected" if rule and rule.type.value == 'custom' and rule.config.get('day') == d }}>
+              {{ d }}일
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          며칠 전에 알릴지 (쉼표로 구분)
+          <input name="custom_lead_times"
+                 value="{{ rule.lead_times_days | join(', ') if rule and rule.type.value == 'custom' else '0' }}"
+                 placeholder="예: 7, 3, 0" />
+          <small>0 = 당일 알림</small>
+        </label>
+      </div>
+
+      <label>
+        발송 시각
+        <input type="number" name="custom_hour" min="0" max="23"
+               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'custom' else 9 }}" />
+        <small>시 (0~23, 기본 9시). 1회성이면 위 날짜+시각을 우선합니다.</small>
+      </label>
+      <label>
+        메시지 내용
+        <textarea name="custom_message" rows="3"
+                  placeholder="보낼 메시지를 입력하세요. 비우면 규칙 이름을 메시지로 사용합니다.">{{ rule.config.get('message', '') if rule and rule.type.value == 'custom' else '' }}</textarea>
+      </label>
+    </fieldset>
+  </div>
+
+  {# ── 공통 하단 ── #}
   <label>
     활성
     <input name="active" type="checkbox" {{ "checked" if not rule or rule.active else "" }} />
@@ -43,4 +265,25 @@
   <button type="submit">저장</button>
   <a href="/rules" role="button" class="secondary">취소</a>
 </form>
+
+<script>
+function showSection(type) {
+  document.querySelectorAll('.type-section').forEach(el => el.style.display = 'none');
+  if (type) {
+    const el = document.getElementById('section-' + type);
+    if (el) el.style.display = 'block';
+  }
+}
+function toggleCustomDate() {
+  const val = document.getElementById('custom-repeat').value;
+  document.getElementById('custom-once').style.display   = val === 'once'   ? 'block' : 'none';
+  document.getElementById('custom-yearly').style.display = val === 'yearly' ? 'block' : 'none';
+}
+// 페이지 로드 시 현재 선택된 타입 섹션 표시
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('rule-type');
+  showSection(sel.value);
+  toggleCustomDate();
+});
+</script>
 {% endblock %}

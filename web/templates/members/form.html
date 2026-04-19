@@ -13,13 +13,43 @@
     <input name="telegram_user_id" type="number"
            value="{{ member.telegram_user_id if member and member.telegram_user_id else '' }}"
            placeholder="없으면 비워두세요" />
-    <small>봇에서 /start 보내면 관리자에게 ID가 표시됩니다.</small>
+    <small>봇 DM에서 /start 보내면 확인 가능. 또는 @userinfobot 에게 DM.</small>
   </label>
-  <label>
-    생일 (양력)
-    <input name="birthday_solar" type="date"
-           value="{{ member.birthday_solar.isoformat() if member and member.birthday_solar else '' }}" />
-  </label>
+
+  <fieldset>
+    <legend>생일</legend>
+    <label>
+      양력 생일
+      <input name="birthday_solar" type="date"
+             value="{{ member.birthday_solar.isoformat() if member and member.birthday_solar else '' }}" />
+    </label>
+    <label>
+      음력 생일 (월)
+      <select name="birthday_lunar_month">
+        <option value="">—</option>
+        {% for m in range(1, 13) %}
+        <option value="{{ m }}"
+          {{ "selected" if member and member.birthday_lunar and member.birthday_lunar.month == m }}>
+          {{ m }}월
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      음력 생일 (일)
+      <select name="birthday_lunar_day">
+        <option value="">—</option>
+        {% for d in range(1, 31) %}
+        <option value="{{ d }}"
+          {{ "selected" if member and member.birthday_lunar and member.birthday_lunar.day == d }}>
+          {{ d }}일
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <small>양력과 음력 중 하나만 입력해도 됩니다. 둘 다 있으면 생일 알림에서 선택 가능합니다.</small>
+  </fieldset>
+
   <label>
     활성
     <input name="active" type="checkbox"

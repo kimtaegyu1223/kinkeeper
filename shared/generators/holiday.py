@@ -11,6 +11,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     lunar_month = rule.config.get("lunar_month")
     lunar_day = rule.config.get("lunar_day")
     holiday_name = rule.config.get("name", "명절")
+    hour = int(rule.config.get("hour", 9))
 
     if not lunar_month or not lunar_day:
         return
@@ -18,7 +19,6 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     today = datetime.now(UTC).date()
     horizon = today + timedelta(days=horizon_days)
 
-    # 올해와 내년 모두 확인
     for year in (today.year, today.year + 1):
         result = lunar_to_solar(year, lunar_month, lunar_day)
         if not result:
@@ -36,7 +36,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             if notify_date < today:
                 continue
             scheduled_at = datetime(
-                notify_date.year, notify_date.month, notify_date.day, 9, 0, tzinfo=UTC
+                notify_date.year, notify_date.month, notify_date.day, hour, 0, tzinfo=UTC
             )
             if lead == 0:
                 msg = f"🎊 오늘은 <b>{holiday_name}</b>입니다! 가족과 즐거운 시간 보내세요."
