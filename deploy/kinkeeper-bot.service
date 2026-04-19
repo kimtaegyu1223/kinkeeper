@@ -1,16 +1,18 @@
+# 이 파일은 deploy/install.sh 가 USER와 PROJECT_DIR을 자동으로 교체합니다.
+# 직접 복사해서 쓸 경우 User=, WorkingDirectory=, ExecStart=, EnvironmentFile= 경로를 수정하세요.
 [Unit]
 Description=KinKeeper Telegram Bot
-After=network-online.target postgresql.service
-Wants=postgresql.service
+After=network-online.target docker.service
+Wants=docker.service
 
 [Service]
 Type=simple
-User=ktg
-WorkingDirectory=/home/ktg/projects/kinkeeper
-ExecStart=/home/ktg/projects/kinkeeper/.venv/bin/python -m bot.main
+User=__USER__
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/.venv/bin/python -m bot.main
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/home/ktg/projects/kinkeeper/.env
+EnvironmentFile=__PROJECT_DIR__/.env
 
 [Install]
 WantedBy=multi-user.target

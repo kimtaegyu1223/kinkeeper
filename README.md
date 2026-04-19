@@ -209,7 +209,7 @@ testcontainers로 실제 PostgreSQL을 띄워 테스트합니다 (Docker 필요)
 
 ```bash
 # crontab -e 에 추가 (매일 새벽 2시)
-0 2 * * * bash /home/ktg/projects/kinkeeper/deploy/pg_backup.sh
+0 2 * * * bash /path/to/kinkeeper/deploy/pg_backup.sh
 ```
 
 ---

@@ -75,8 +75,8 @@ echo "[6/7] systemd 서비스 등록..."
 # 실행 경로와 유저를 현재 환경에 맞게 교체
 for svc in kinkeeper-bot kinkeeper-web; do
   sed \
-    -e "s|User=ktg|User=$SERVICE_USER|g" \
-    -e "s|/home/ktg/projects/kinkeeper|$PROJECT_DIR|g" \
+    -e "s|__USER__|$SERVICE_USER|g" \
+    -e "s|__PROJECT_DIR__|$PROJECT_DIR|g" \
     "$PROJECT_DIR/deploy/$svc.service" \
     | sudo tee "/etc/systemd/system/$svc.service" > /dev/null
   echo "  → /etc/systemd/system/$svc.service 등록"
