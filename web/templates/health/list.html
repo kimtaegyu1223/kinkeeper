@@ -1,52 +1,84 @@
 {% extends "base.html" %}
 {% block title %}건강검진 관리 — KinKeeper{% endblock %}
 {% block content %}
-<h2>🏥 건강검진 관리</h2>
 
-<h3>검진 항목
-  <a href="/health/types/new" role="button" style="font-size:0.8em">+ 항목 추가</a>
-</h3>
-<table>
-  <thead>
-    <tr><th>항목명</th><th>주기</th><th>대상</th><th>상태</th><th></th></tr>
-  </thead>
-  <tbody>
-    {% for ct in types %}
-    <tr>
-      <td>{{ ct.name }}</td>
-      <td>{{ ct.period_years }}년마다</td>
-      <td>{{ {"M": "남성", "F": "여성"}.get(ct.gender, "모두") }}</td>
-      <td>{{ "활성" if ct.active else "비활성" }}</td>
-      <td>
-        <a href="/health/types/{{ ct.id }}/edit">수정</a> |
-        <a href="#"
-           hx-delete="/health/types/{{ ct.id }}"
-           hx-confirm="삭제하면 모든 검진 기록도 삭제됩니다. 계속하시겠습니까?"
-           hx-target="closest tr" hx-swap="outerHTML"
-           class="danger">삭제</a>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="5">등록된 검진 항목이 없습니다. 항목을 먼저 추가하세요.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<hgroup>
+  <h2>건강검진 관리</h2>
+  <p>검진 항목을 설정하고 구성원별 기록을 확인하세요.</p>
+</hgroup>
 
-<hr>
-<h3>구성원별 검진 기록</h3>
-<table>
-  <thead>
-    <tr><th>이름</th><th></th></tr>
-  </thead>
-  <tbody>
+<article>
+  <header>
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <h3 style="margin:0">검진 항목</h3>
+      <a href="/health/types/new" role="button">+ 항목 추가</a>
+    </div>
+  </header>
+
+  <table>
+    <thead>
+      <tr>
+        <th>항목명</th>
+        <th>주기</th>
+        <th>대상 성별</th>
+        <th>n세 이상</th>
+        <th>상태</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ct in types %}
+      <tr>
+        <td>{{ ct.name }}</td>
+        <td>{{ ct.period_years }}년마다</td>
+        <td>{{ {"M": "남성", "F": "여성"}.get(ct.gender, "모두") }}</td>
+        <td>{{ ct.min_age ~ "세" if ct.min_age is not none else "없음" }}</td>
+        <td>
+          {% if ct.active %}
+          <ins>활성</ins>
+          {% else %}
+          <del>비활성</del>
+          {% endif %}
+        </td>
+        <td>
+          <a href="/health/types/{{ ct.id }}/edit" role="button" class="secondary" style="margin-right:0.3rem">수정</a>
+          <a href="#"
+             hx-delete="/health/types/{{ ct.id }}"
+             hx-confirm="삭제하면 모든 검진 기록도 삭제됩니다. 계속하시겠습니까?"
+             hx-target="closest tr" hx-swap="outerHTML"
+             role="button" class="contrast">삭제</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6">
+          <small>등록된 검진 항목이 없습니다. 항목을 먼저 추가하세요.</small>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
+
+<article>
+  <header>
+    <h3 style="margin:0">구성원별 검진 기록</h3>
+  </header>
+
+  {% if members %}
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem">
     {% for m in members %}
-    <tr>
-      <td>{{ m.name }}</td>
-      <td><a href="/health/records/{{ m.id }}">검진 기록 보기 / 입력</a></td>
-    </tr>
-    {% else %}
-    <tr><td colspan="2">등록된 구성원이 없습니다.</td></tr>
+    <article style="margin:0">
+      <header style="padding-bottom:0.5rem">
+        <strong>{{ m.name }}</strong>
+      </header>
+      <a href="/health/records/{{ m.id }}" role="button" class="secondary">검진 기록 보기</a>
+    </article>
     {% endfor %}
-  </tbody>
-</table>
+  </div>
+  {% else %}
+  <p><small>등록된 구성원이 없습니다.</small></p>
+  {% endif %}
+</article>
+
 {% endblock %}

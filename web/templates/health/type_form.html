@@ -1,41 +1,55 @@
 {% extends "base.html" %}
 {% block title %}{{ "항목 수정" if ct else "항목 추가" }} — KinKeeper{% endblock %}
 {% block content %}
-<h2>🏥 {{ "검진 항목 수정" if ct else "검진 항목 추가" }}</h2>
 
-<form method="post">
-  <label>
-    항목명
-    <input name="name" value="{{ ct.name if ct else '' }}" required maxlength="100"
-           placeholder="예: 위내시경" />
-  </label>
-  <label>
-    검진 주기 (년)
-    <input type="number" name="period_years" min="1" max="10"
-           value="{{ ct.period_years if ct else 2 }}" required />
-    <small>예: 2 → 2년에 한 번</small>
-  </label>
-  <label>
-    대상 성별
-    <select name="gender">
-      <option value=""   {{ "selected" if not ct or not ct.gender }}>모두</option>
-      <option value="M"  {{ "selected" if ct and ct.gender == 'M' }}>남성만</option>
-      <option value="F"  {{ "selected" if ct and ct.gender == 'F' }}>여성만</option>
-    </select>
-    <small>여성 전용 검사(유방초음파 등)는 여성만 선택</small>
-  </label>
-  <label>
-    최소 나이
-    <input name="min_age_str" type="number" min="0" max="120"
-           value="{{ ct.min_age if ct and ct.min_age is not none else '' }}"
-           placeholder="없으면 비워두세요" />
-    <small>이 나이 미만 구성원에게는 알림을 보내지 않습니다.</small>
-  </label>
-  <label>
-    활성
-    <input name="active" type="checkbox" {{ "checked" if not ct or ct.active else "" }} />
-  </label>
-  <button type="submit">저장</button>
-  <a href="/health" role="button" class="secondary">취소</a>
-</form>
+<hgroup>
+  <h2>{{ "검진 항목 수정" if ct else "검진 항목 추가" }}</h2>
+  <p>검진 항목의 기본 정보를 설정하세요.</p>
+</hgroup>
+
+<article>
+  <form method="post">
+    <label>
+      항목명
+      <input name="name" value="{{ ct.name if ct else '' }}" required maxlength="100"
+             placeholder="예: 위내시경" />
+    </label>
+
+    <label>
+      검진 주기 (년)
+      <input type="number" name="period_years" min="1" max="10"
+             value="{{ ct.period_years if ct else 2 }}" required />
+      <small>예: 2 → 2년에 한 번</small>
+    </label>
+
+    <label>
+      대상 성별
+      <select name="gender">
+        <option value=""  {{ "selected" if not ct or not ct.gender }}>모두</option>
+        <option value="M" {{ "selected" if ct and ct.gender == 'M' }}>남성만</option>
+        <option value="F" {{ "selected" if ct and ct.gender == 'F' }}>여성만</option>
+      </select>
+      <small>여성 전용 검사(유방초음파 등)는 여성만 선택</small>
+    </label>
+
+    <label>
+      최소 나이
+      <input name="min_age_str" type="number" min="0" max="120"
+             value="{{ ct.min_age if ct and ct.min_age is not none else '' }}"
+             placeholder="없으면 비워두세요" />
+      <small>이 나이 미만 구성원에게는 알림을 보내지 않습니다.</small>
+    </label>
+
+    <label>
+      <input name="active" type="checkbox" {{ "checked" if not ct or ct.active else "" }} />
+      활성
+    </label>
+
+    <div style="display:flex; gap:0.5rem; margin-top:1rem">
+      <button type="submit">저장</button>
+      <a href="/health" role="button" class="secondary">취소</a>
+    </div>
+  </form>
+</article>
+
 {% endblock %}
