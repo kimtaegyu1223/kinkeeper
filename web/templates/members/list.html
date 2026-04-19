@@ -19,7 +19,7 @@
       <td>{{ "활성" if m.active else "비활성" }}</td>
       <td>
         <a href="/members/{{ m.id }}/edit">수정</a> |
-        <a href="/members/{{ m.id }}/delete"
+        <a href="#"
            hx-delete="/members/{{ m.id }}"
            hx-confirm="정말 삭제하시겠습니까?"
            hx-target="closest tr"
