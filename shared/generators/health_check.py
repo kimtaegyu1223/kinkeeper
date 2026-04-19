@@ -82,7 +82,7 @@ def rebuild_health_checks(session: Session, horizon_days: int = 60) -> None:
             due_date = _next_due(latest_date, period, today)
 
             if due_date <= today:
-                _schedule_overdue_nudge(session, member, ct, today, horizon, group_chat_id)
+                _schedule_overdue(session, member, ct, today, horizon, group_chat_id)
             elif due_date <= horizon:
                 _schedule_upcoming(session, member, ct, due_date, today, group_chat_id)
 
@@ -117,21 +117,49 @@ def _schedule_upcoming(
         upsert_notification_by_key(session, source_key, scheduled_at, chat_id, msg)
 
 
-def _schedule_overdue_nudge(
+def _first_of_next_month(d: date) -> date:
+    """다음 달 1일 반환."""
+    if d.month == 12:
+        return d.replace(year=d.year + 1, month=1, day=1)
+    return d.replace(month=d.month + 1, day=1)
+
+
+def _schedule_overdue(
     session: Session,
     member: FamilyMember,
     ct: HealthCheckType,
     today: date,
     horizon: date,
-    chat_id: int,
+    group_chat_id: int,
 ) -> None:
-    nudge_date = today + timedelta(days=7)
-    if nudge_date > horizon:
-        return
-    scheduled_at = datetime(nudge_date.year, nudge_date.month, nudge_date.day, 9, 0, tzinfo=UTC)
-    source_key = f"hc:overdue:{member.id}:{ct.id}:{nudge_date.isoformat()}"
-    msg = (
-        f"⚠️ <b>{member.name}</b>님, <b>{ct.name}</b> 검진 시기가 지났습니다!\n"
-        f"검진 후 봇에게 알려주세요 → <code>/검진완료 {ct.name}</code>"
-    )
-    upsert_notification_by_key(session, source_key, scheduled_at, chat_id, msg)
+    """미수검 알림:
+    - 그룹 채널: 월 1회 (매월 1일 9시)
+    - 개인 DM: 주 1회 (7일 간격, telegram_user_id 있는 경우만)
+    """
+    # 그룹 채널 — 월 1회
+    monthly = _first_of_next_month(today)
+    while monthly <= horizon:
+        scheduled_at = datetime(monthly.year, monthly.month, monthly.day, 9, 0, tzinfo=UTC)
+        source_key = f"hc:overdue:group:{member.id}:{ct.id}:{monthly.isoformat()}"
+        msg = (
+            f"📋 <b>[건강검진 미수검]</b>\n"
+            f"<b>{member.name}</b>님 — <b>{ct.name}</b> 검진이 밀려 있습니다.\n"
+            f"검진 후 → <code>/검진완료 {ct.name}</code>"
+        )
+        upsert_notification_by_key(session, source_key, scheduled_at, group_chat_id, msg)
+        monthly = _first_of_next_month(monthly)
+
+    # 개인 DM — 주 1회
+    if member.telegram_user_id:
+        nudge = today + timedelta(days=7)
+        while nudge <= horizon:
+            scheduled_at = datetime(nudge.year, nudge.month, nudge.day, 9, 0, tzinfo=UTC)
+            source_key = f"hc:overdue:dm:{member.id}:{ct.id}:{nudge.isoformat()}"
+            msg = (
+                f"⚠️ <b>{ct.name}</b> 검진 시기가 지났어요!\n"
+                f"빨리 예약하고 검진 후 알려주세요 → <code>/검진완료 {ct.name}</code>"
+            )
+            upsert_notification_by_key(
+                session, source_key, scheduled_at, member.telegram_user_id, msg
+            )
+            nudge += timedelta(days=7)
