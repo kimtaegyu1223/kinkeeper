@@ -41,7 +41,9 @@ class FamilyMember(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    weight_logs: Mapped[list["WeightLog"]] = relationship(back_populates="member")
+    weight_logs: Mapped[list["WeightLog"]] = relationship(
+        back_populates="member", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class ReminderRule(Base):
@@ -68,7 +70,7 @@ class ReminderRule(Base):
     )
 
     notifications: Mapped[list["ScheduledNotification"]] = relationship(
-        back_populates="rule", cascade="all, delete-orphan"
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
