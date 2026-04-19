@@ -120,9 +120,7 @@ def test_upcoming_within_horizon(member, check_type, db_session):
     # period=2년, 검진일이 TODAY+20일이 되려면 2년 전 - 20일에 받았어야 함
     last_checked = TODAY - timedelta(days=365 * 2 - 20)
     db_session.add(
-        HealthCheckRecord(
-            member_id=member.id, check_type_id=check_type.id, checked_at=last_checked
-        )
+        HealthCheckRecord(member_id=member.id, check_type_id=check_type.id, checked_at=last_checked)
     )
     db_session.flush()
 
@@ -249,9 +247,7 @@ def test_min_age_skips_when_no_birthday(db_session):
 
 def test_member_config_inactive_skips(member, check_type, db_session):
     """구성원이 해당 검진을 비활성화하면 알림이 생성되지 않는다."""
-    cfg = MemberHealthCheckConfig(
-        member_id=member.id, check_type_id=check_type.id, active=False
-    )
+    cfg = MemberHealthCheckConfig(member_id=member.id, check_type_id=check_type.id, active=False)
     db_session.add(cfg)
     db_session.flush()
 
@@ -272,9 +268,7 @@ def test_member_config_period_override(member, check_type, db_session):
     """
     last_checked = TODAY - timedelta(days=30 * 13)  # 13개월 전
     db_session.add(
-        HealthCheckRecord(
-            member_id=member.id, check_type_id=check_type.id, checked_at=last_checked
-        )
+        HealthCheckRecord(member_id=member.id, check_type_id=check_type.id, checked_at=last_checked)
     )
     cfg = MemberHealthCheckConfig(
         member_id=member.id, check_type_id=check_type.id, period_years=1, active=True
