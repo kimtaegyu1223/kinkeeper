@@ -29,9 +29,14 @@ def _next_due(latest_checked: date | None, period_years: int, today: date) -> da
     return _add_years(latest_checked, period_years)
 
 
-def rebuild_health_checks(session: Session, horizon_days: int = 60) -> None:
-    """모든 활성 구성원 × 활성 검진 항목 조합으로 알림 예약."""
-    today = datetime.now(UTC).date()
+def rebuild_health_checks(
+    session: Session, horizon_days: int = 60, _today: date | None = None
+) -> None:
+    """모든 활성 구성원 × 활성 검진 항목 조합으로 알림 예약.
+
+    _today: 테스트용 날짜 주입 (None이면 오늘 사용)
+    """
+    today = _today or datetime.now(UTC).date()
     horizon = today + timedelta(days=horizon_days)
     group_chat_id = settings.group_chat_id
 
