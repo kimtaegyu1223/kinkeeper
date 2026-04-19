@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.generators.base import upsert_notification
 from shared.models import FamilyMember, ReminderRule, WeightLog
 
@@ -55,16 +56,11 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
 
     scheduled_at = datetime(next_day.year, next_day.month, next_day.day, hour, 0, tzinfo=UTC)
 
-    # 대상 구성원별 리포트 생성
-    query = select(FamilyMember).where(
-        FamilyMember.active.is_(True),
-        FamilyMember.telegram_user_id.isnot(None),
-    )
-    if rule.target_member_ids:
-        query = query.where(FamilyMember.id.in_(rule.target_member_ids))
+    # 모든 가족원의 리포트를 그룹에 발송
+    members = session.scalars(select(FamilyMember).where(FamilyMember.active.is_(True))).all()
 
-    members = session.scalars(query).all()
+    # 각 가족원별 리포트를 개별 메시지로 발송
     for member in members:
         msg = _build_report(member, session, cadence)
-        if msg and member.telegram_user_id:
-            upsert_notification(session, rule, scheduled_at, member.telegram_user_id, msg)
+        if msg:
+            upsert_notification(session, rule, scheduled_at, settings.group_chat_id, msg)

@@ -54,10 +54,6 @@ class ReminderRule(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     # 며칠 전에 알릴지 목록 (예: [14, 7, 3, 1])
     lead_times_days: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, nullable=False)
-    # 알림 대상 가족 구성원 ID 목록 (빈 배열 = 전체)
-    target_member_ids: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer), default=list, nullable=False
-    )
     # 타입별 추가 설정 (JSONB)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -125,14 +121,7 @@ class AdminBroadcast(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     sent_by: Mapped[str] = mapped_column(String(100), nullable=False)
-    target_member_ids: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer), default=list, nullable=False
-    )
     message: Mapped[str] = mapped_column(Text, nullable=False)
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    # DB 경유 발송이므로 실제 전송 결과는 scheduled_notifications에서 추적
-    notification_ids: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer), default=list, nullable=False
     )

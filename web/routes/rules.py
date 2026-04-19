@@ -37,7 +37,6 @@ def create_rule(
     type: str = Form(...),
     title: str = Form(...),
     lead_times_days: str = Form(""),
-    target_member_ids: str = Form(""),
     config: str = Form("{}"),
     active: str = Form(""),
 ) -> RedirectResponse:
@@ -46,7 +45,6 @@ def create_rule(
             type=ReminderType(type),
             title=title.strip(),
             lead_times_days=_parse_int_list(lead_times_days),
-            target_member_ids=_parse_int_list(target_member_ids),
             config=json.loads(config or "{}"),
             active=bool(active),
         )
@@ -67,7 +65,6 @@ def update_rule(
     type: str = Form(...),
     title: str = Form(...),
     lead_times_days: str = Form(""),
-    target_member_ids: str = Form(""),
     config: str = Form("{}"),
     active: str = Form(""),
 ) -> RedirectResponse:
@@ -77,7 +74,6 @@ def update_rule(
             rule.type = ReminderType(type)
             rule.title = title.strip()
             rule.lead_times_days = _parse_int_list(lead_times_days)
-            rule.target_member_ids = _parse_int_list(target_member_ids)
             rule.config = json.loads(config or "{}")
             rule.active = bool(active)
     return RedirectResponse("/rules", status_code=303)

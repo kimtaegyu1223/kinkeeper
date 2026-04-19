@@ -39,20 +39,10 @@ def upsert_notification(
 
 
 def get_target_telegram_ids(session: Session, rule: ReminderRule) -> list[int]:
-    """rule.target_member_ids 기반으로 실제 telegram_user_id 목록 반환."""
-    from sqlalchemy import select
+    """그룹채널 ID만 반환 (모든 알림은 그룹에 발송)."""
+    from shared.config import settings
 
-    from shared.models import FamilyMember
-
-    query = select(FamilyMember).where(
-        FamilyMember.active.is_(True),
-        FamilyMember.telegram_user_id.isnot(None),
-    )
-    if rule.target_member_ids:
-        query = query.where(FamilyMember.id.in_(rule.target_member_ids))
-
-    members = session.scalars(query).all()
-    return [m.telegram_user_id for m in members if m.telegram_user_id]
+    return [settings.group_chat_id]
 
 
 def now_utc() -> datetime:
