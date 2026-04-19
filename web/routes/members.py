@@ -14,13 +14,11 @@ from web.auth import verify_admin
 router = APIRouter(prefix="/members", dependencies=[Depends(verify_admin)])
 templates = Jinja2Templates(directory="web/templates")
 
-# 생일 알림 기본 리드타임: 7일 전, 3일 전, 당일
 _DEFAULT_BIRTHDAY_LEADS = [7, 3, 0]
 _DEFAULT_BIRTHDAY_HOUR = 9
 
 
 def _parse_lunar(month: str, day: str) -> date | None:
-    """음력 월/일 → DATE (연도는 2000으로 고정, 월/일만 의미 있음)."""
     m = int(month) if month.strip() else 0
     d = int(day) if day.strip() else 0
     if m and d:
@@ -28,8 +26,11 @@ def _parse_lunar(month: str, day: str) -> date | None:
     return None
 
 
+def _parse_gender(gender: str) -> str | None:
+    return gender if gender in ("M", "F") else None
+
+
 def _ensure_birthday_rule(session: object, member: FamilyMember) -> ReminderRule | None:
-    """구성원에게 생일이 있으면 생일 알림 규칙을 자동 생성/갱신."""
     from sqlalchemy.orm import Session as SASession
 
     if not isinstance(session, SASession):
@@ -37,7 +38,6 @@ def _ensure_birthday_rule(session: object, member: FamilyMember) -> ReminderRule
     if not member.birthday_solar and not member.birthday_lunar:
         return None
 
-    # 이미 이 구성원의 생일 규칙이 있으면 config만 갱신
     existing = session.scalar(
         select(ReminderRule).where(
             ReminderRule.type == ReminderType.birthday,
@@ -88,6 +88,7 @@ def create_member(
     birthday_solar: str = Form(""),
     birthday_lunar_month: str = Form(""),
     birthday_lunar_day: str = Form(""),
+    gender: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
     rule_id: int | None = None
@@ -97,10 +98,11 @@ def create_member(
             telegram_user_id=int(telegram_user_id) if telegram_user_id.strip() else None,
             birthday_solar=date.fromisoformat(birthday_solar) if birthday_solar else None,
             birthday_lunar=_parse_lunar(birthday_lunar_month, birthday_lunar_day),
+            gender=_parse_gender(gender),
             active=bool(active),
         )
         session.add(member)
-        session.flush()  # member.id 확보
+        session.flush()
         rule = _ensure_birthday_rule(session, member)
         if rule:
             session.flush()
@@ -127,6 +129,7 @@ def update_member(
     birthday_solar: str = Form(""),
     birthday_lunar_month: str = Form(""),
     birthday_lunar_day: str = Form(""),
+    gender: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
     rule_id: int | None = None
@@ -137,6 +140,7 @@ def update_member(
             member.telegram_user_id = int(telegram_user_id) if telegram_user_id.strip() else None
             member.birthday_solar = date.fromisoformat(birthday_solar) if birthday_solar else None
             member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
+            member.gender = _parse_gender(gender)
             member.active = bool(active)
             rule = _ensure_birthday_rule(session, member)
             if rule:

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ member.name }} 건강검진 기록 — KinKeeper{% endblock %}
+{% block content %}
+<h2>🏥 {{ member.name }}님 건강검진 기록</h2>
+<a href="/health">← 목록으로</a>
+
+<h3>검진 현황</h3>
+<table>
+  <thead>
+    <tr><th>항목</th><th>주기</th><th>최근 검진일</th><th>다음 예정일</th><th>상태</th></tr>
+  </thead>
+  <tbody>
+    {% for ct in check_types %}
+      {% if not ct.gender or ct.gender == member.gender %}
+      {% set rec = latest_by_type.get(ct.id) %}
+      {% if rec %}
+        {% set next_year = rec.checked_at.year + ct.period_years %}
+        {% set next_due = rec.checked_at.replace(year=next_year) %}
+        {% set days_left = (next_due - today).days %}
+      {% endif %}
+    <tr>
+      <td>{{ ct.name }}</td>
+      <td>{{ ct.period_years }}년</td>
+      <td>{{ rec.checked_at.strftime("%Y-%m-%d") if rec else "—" }}</td>
+      <td>{{ next_due.strftime("%Y-%m-%d") if rec else "—" }}</td>
+      <td>
+        {% if not rec %}⚪ 기록없음
+        {% elif days_left < 0 %}⚠️ {{ days_left|abs }}일 초과
+        {% elif days_left <= 30 %}🔜 {{ days_left }}일 후
+        {% else %}✅ {{ days_left }}일 후
+        {% endif %}
+      </td>
+    </tr>
+      {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<hr>
+<h3>검진 기록 추가</h3>
+<form method="post" action="/health/records/{{ member.id }}/add">
+  <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end">
+    <label style="flex:1; min-width:150px">
+      검진 항목
+      <select name="check_type_id" required>
+        {% for ct in check_types %}
+        {% if not ct.gender or ct.gender == member.gender %}
+        <option value="{{ ct.id }}">{{ ct.name }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <label style="flex:1; min-width:150px">
+      검진일
+      <input type="date" name="checked_at" value="{{ today.isoformat() }}" required />
+    </label>
+    <label style="flex:2; min-width:200px">
+      메모 (선택)
+      <input name="note" placeholder="예: 이상 없음" />
+    </label>
+    <button type="submit" style="margin-bottom:0.5rem">기록 추가</button>
+  </div>
+</form>
+
+<hr>
+<h3>전체 기록 이력</h3>
+<table>
+  <thead>
+    <tr><th>항목</th><th>검진일</th><th>메모</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for r in all_records %}
+    <tr>
+      <td>{{ r.check_type.name }}</td>
+      <td>{{ r.checked_at.strftime("%Y-%m-%d") }}</td>
+      <td>{{ r.note or "—" }}</td>
+      <td>
+        <a href="#"
+           hx-delete="/health/records/{{ r.id }}"
+           hx-confirm="이 기록을 삭제하시겠습니까?"
+           hx-target="closest tr" hx-swap="outerHTML"
+           class="danger">삭제</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">기록이 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

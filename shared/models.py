@@ -5,12 +5,14 @@ from sqlalchemy import (
     ARRAY,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -35,13 +37,19 @@ class FamilyMember(Base):
     )
     birthday_solar: Mapped[date | None] = mapped_column(nullable=True)
     birthday_lunar: Mapped[date | None] = mapped_column(nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=미설정
     timezone: Mapped[str] = mapped_column(String(50), default="Asia/Seoul", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    weight_logs: Mapped[list["WeightLog"]] = relationship(back_populates="member")
+    weight_logs: Mapped[list["WeightLog"]] = relationship(
+        back_populates="member", cascade="all, delete-orphan", passive_deletes=True
+    )
+    health_records: Mapped[list["HealthCheckRecord"]] = relationship(
+        back_populates="member", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class ReminderRule(Base):
@@ -52,9 +60,7 @@ class ReminderRule(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     type: Mapped[ReminderType] = mapped_column(nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    # 며칠 전에 알릴지 목록 (예: [14, 7, 3, 1])
     lead_times_days: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, nullable=False)
-    # 타입별 추가 설정 (JSONB)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -68,7 +74,7 @@ class ReminderRule(Base):
     )
 
     notifications: Mapped[list["ScheduledNotification"]] = relationship(
-        back_populates="rule", cascade="all, delete-orphan"
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -78,10 +84,11 @@ class ScheduledNotification(Base):
     __tablename__ = "scheduled_notifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # 수동 공지는 rule 없이 발송되므로 nullable
     rule_id: Mapped[int | None] = mapped_column(
         ForeignKey("reminder_rules.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    # 건강검진 등 rule 없이 생성되는 알림의 중복 방지 키
+    source_key: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
@@ -93,7 +100,7 @@ class ScheduledNotification(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    rule: Mapped[ReminderRule] = relationship(back_populates="notifications")
+    rule: Mapped[ReminderRule | None] = relationship(back_populates="notifications")
 
 
 class WeightLog(Base):
@@ -125,3 +132,44 @@ class AdminBroadcast(Base):
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class HealthCheckType(Base):
+    """건강검진 항목 (관리자가 추가/수정 가능)."""
+
+    __tablename__ = "health_check_types"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    period_years: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=모두
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    records: Mapped[list["HealthCheckRecord"]] = relationship(
+        back_populates="check_type", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class HealthCheckRecord(Base):
+    """가족 구성원 건강검진 완료 기록."""
+
+    __tablename__ = "health_check_records"
+    __table_args__ = (
+        UniqueConstraint("member_id", "check_type_id", "checked_at", name="uq_health_record"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    member_id: Mapped[int] = mapped_column(
+        ForeignKey("family_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    check_type_id: Mapped[int] = mapped_column(
+        ForeignKey("health_check_types.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    checked_at: Mapped[date] = mapped_column(Date, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    member: Mapped[FamilyMember] = relationship(back_populates="health_records")
+    check_type: Mapped[HealthCheckType] = relationship(back_populates="records")

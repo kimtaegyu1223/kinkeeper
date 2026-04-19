@@ -51,6 +51,15 @@
   </fieldset>
 
   <label>
+    성별
+    <select name="gender">
+      <option value=""  {{ "selected" if not member or not member.gender }}>미설정</option>
+      <option value="M" {{ "selected" if member and member.gender == 'M' }}>남성</option>
+      <option value="F" {{ "selected" if member and member.gender == 'F' }}>여성</option>
+    </select>
+    <small>여성 전용 검진 항목(유방초음파 등) 필터링에 사용됩니다.</small>
+  </label>
+  <label>
     활성
     <input name="active" type="checkbox"
            {{ "checked" if not member or member.active else "" }} />

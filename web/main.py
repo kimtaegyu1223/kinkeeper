@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from shared.db import check_db_connection
 from web.routes.broadcast import router as broadcast_router
 from web.routes.diet import router as diet_router
+from web.routes.health_checks import router as health_router
 from web.routes.members import router as members_router
 from web.routes.rules import router as rules_router
 
@@ -17,6 +18,7 @@ app = FastAPI(title="KinKeeper 관리자", docs_url=None, redoc_url=None)
 
 app.include_router(members_router)
 app.include_router(rules_router)
+app.include_router(health_router)
 app.include_router(broadcast_router)
 app.include_router(diet_router)
 
