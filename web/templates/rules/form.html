@@ -210,10 +210,18 @@
         </label>
       </div>
 
-      {# 매년 반복: 월/일 + 시각 #}
+      {# 매년 반복: 양력/음력 선택 + 월/일 #}
       <div id="custom-yearly" style="display:none">
         <label>
-          매년 알림 월
+          날짜 기준
+          <select name="custom_use_lunar" id="custom-use-lunar">
+            <option value="0" {{ "selected" if rule and not rule.config.get('use_lunar') }}>양력</option>
+            <option value="1" {{ "selected" if rule and rule.config.get('use_lunar') }}>음력 (매년 자동 환산)</option>
+          </select>
+          <small>음력 선택 시 매년 해당 음력 날짜를 양력으로 자동 변환해 알림을 보냅니다.</small>
+        </label>
+        <label>
+          월
           <select name="custom_month">
             {% for m in range(1, 13) %}
             <option value="{{ m }}"
@@ -224,7 +232,7 @@
           </select>
         </label>
         <label>
-          매년 알림 일
+          일
           <select name="custom_day">
             {% for d in range(1, 32) %}
             <option value="{{ d }}"

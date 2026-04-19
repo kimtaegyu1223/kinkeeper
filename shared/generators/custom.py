@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from shared.generators.base import get_target_telegram_ids, upsert_notification
+from shared.lunar import lunar_to_solar
 from shared.models import ReminderRule
 
 
@@ -10,12 +11,16 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     config = rule.config
     repeat = config.get("repeat")
     msg = config.get("message") or rule.title
-    hour = int(config.get("hour", 9))
+    hour = int(str(config.get("hour") or 9))
 
     target_ids = get_target_telegram_ids(session, rule)
 
     if repeat == "yearly":
-        _generate_yearly(rule, session, horizon_days, config, hour, msg, target_ids)
+        use_lunar = bool(config.get("use_lunar"))
+        if use_lunar:
+            _generate_yearly_lunar(rule, session, horizon_days, config, hour, msg, target_ids)
+        else:
+            _generate_yearly(rule, session, horizon_days, config, hour, msg, target_ids)
     else:
         _generate_once(rule, session, config, hour, msg, target_ids)
 
@@ -63,6 +68,41 @@ def _generate_yearly(
             event_date = date(year, month, day)
         except ValueError:
             continue
+
+        if event_date < today or event_date > horizon:
+            continue
+
+        for lead in rule.lead_times_days:
+            notify_date = event_date - timedelta(days=lead)
+            if notify_date < today:
+                continue
+            scheduled_at = datetime(
+                notify_date.year, notify_date.month, notify_date.day, hour, 0, tzinfo=UTC
+            )
+            for tid in target_ids:
+                upsert_notification(session, rule, scheduled_at, tid, msg)
+
+
+def _generate_yearly_lunar(
+    rule: ReminderRule,
+    session: Session,
+    horizon_days: int,
+    config: dict[str, object],
+    hour: int,
+    msg: str,
+    target_ids: list[int],
+) -> None:
+    lunar_month = int(str(config.get("month") or 1))
+    lunar_day = int(str(config.get("day") or 1))
+    today = datetime.now(UTC).date()
+    horizon = today + timedelta(days=horizon_days)
+
+    for year in (today.year, today.year + 1):
+        result = lunar_to_solar(year, lunar_month, lunar_day)
+        if not result:
+            continue
+        y, m, d = result
+        event_date = date(y, m, d)
 
         if event_date < today or event_date > horizon:
             continue
