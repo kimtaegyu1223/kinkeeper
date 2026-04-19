@@ -3,6 +3,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from bot.handlers.basic import help_command, start
+from bot.handlers.health import health_done_command, health_status_command
 from bot.handlers.query import birthday_command, upcoming_command
 from bot.handlers.weight import weight_command
 from bot.scheduler import create_scheduler, rebuild_upcoming_async
@@ -35,6 +36,10 @@ async def _handle_korean_command(update: Update, context: ContextTypes.DEFAULT_T
         await upcoming_command(update, context)
     elif text.startswith("/내생일"):
         await birthday_command(update, context)
+    elif text.startswith("/내건강검진"):
+        await health_status_command(update, context)
+    elif text.startswith("/검진완료"):
+        await health_done_command(update, context)
 
 
 def main() -> None:

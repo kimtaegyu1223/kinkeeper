@@ -42,9 +42,11 @@ def _mark_sent(notification_id: int, success: bool, error: str | None = None) ->
 
 def _do_rebuild() -> None:
     from shared.generators import rebuild_upcoming
+    from shared.generators.health_check import rebuild_health_checks
 
     with get_session() as session:
         rebuild_upcoming(session, horizon_days=settings.schedule_horizon_days)
+        rebuild_health_checks(session, horizon_days=settings.schedule_horizon_days)
     log.info("알림 예정 재생성 완료", horizon_days=settings.schedule_horizon_days)
 
 
