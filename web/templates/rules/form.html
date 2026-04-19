@@ -23,13 +23,7 @@
     <input name="lead_times_days"
            value="{{ rule.lead_times_days | join(', ') if rule else '14, 7, 3, 1' }}"
            placeholder="예: 14, 7, 3, 1" />
-    <small>생일·명절 등에서 몇 일 전에 알림을 보낼지 지정합니다.</small>
-  </label>
-  <label>
-    대상 구성원 (쉼표로 구분, 비우면 전체)
-    <input name="target_member_ids"
-           value="{{ rule.target_member_ids | join(', ') if rule else '' }}"
-           placeholder="예: 1, 2, 3 — 비우면 전체" />
+    <small>생일·명절 등에서 몇 일 전에 알림을 보낼지 지정합니다. 모든 알림은 그룹채널에 발송됩니다.</small>
   </label>
   <label>
     추가 설정 (JSON)

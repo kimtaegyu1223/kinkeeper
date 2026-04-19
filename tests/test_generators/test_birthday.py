@@ -26,7 +26,6 @@ def rule(member, db_session):
         type=ReminderType.birthday,
         title="테스트 생일",
         lead_times_days=[7, 3, 1, 0],
-        target_member_ids=[member.id],
         config={"member_id": member.id},
         active=True,
     )
