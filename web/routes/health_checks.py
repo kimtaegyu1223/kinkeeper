@@ -38,14 +38,17 @@ def create_type(
     name: str = Form(...),
     period_years: int = Form(2),
     gender: str = Form(""),
+    min_age_str: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
+    min_age = int(min_age_str) if min_age_str.strip() else None
     with get_session() as session:
         session.add(
             HealthCheckType(
                 name=name.strip(),
                 period_years=period_years,
                 gender=gender if gender in ("M", "F") else None,
+                min_age=min_age,
                 active=bool(active),
             )
         )
@@ -65,14 +68,17 @@ def update_type(
     name: str = Form(...),
     period_years: int = Form(2),
     gender: str = Form(""),
+    min_age_str: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
+    min_age = int(min_age_str) if min_age_str.strip() else None
     with get_session() as session:
         ct = session.get(HealthCheckType, type_id)
         if ct:
             ct.name = name.strip()
             ct.period_years = period_years
             ct.gender = gender if gender in ("M", "F") else None
+            ct.min_age = min_age
             ct.active = bool(active)
     return RedirectResponse("/health", status_code=303)
 

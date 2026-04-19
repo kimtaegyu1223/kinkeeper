@@ -25,6 +25,13 @@
     <small>여성 전용 검사(유방초음파 등)는 여성만 선택</small>
   </label>
   <label>
+    최소 나이
+    <input name="min_age_str" type="number" min="0" max="120"
+           value="{{ ct.min_age if ct and ct.min_age is not none else '' }}"
+           placeholder="없으면 비워두세요" />
+    <small>이 나이 미만 구성원에게는 알림을 보내지 않습니다.</small>
+  </label>
+  <label>
     활성
     <input name="active" type="checkbox" {{ "checked" if not ct or ct.active else "" }} />
   </label>

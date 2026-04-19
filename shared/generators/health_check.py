@@ -45,6 +45,16 @@ def rebuild_health_checks(session: Session, horizon_days: int = 60) -> None:
             if ct.gender and member.gender != ct.gender:
                 continue
 
+            # 나이 제한 체크
+            if ct.min_age is not None:
+                if not member.birthday_solar and not member.birthday_lunar:
+                    continue  # 생일 모르면 스킵
+                bday = member.birthday_solar or member.birthday_lunar
+                assert bday is not None
+                age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                if age < ct.min_age:
+                    continue
+
             config = session.scalar(
                 select(MemberHealthCheckConfig).where(
                     MemberHealthCheckConfig.member_id == member.id,

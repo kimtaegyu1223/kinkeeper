@@ -146,6 +146,7 @@ class HealthCheckType(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     period_years: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=모두
+    min_age: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None = 나이 제한 없음
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     records: Mapped[list["HealthCheckRecord"]] = relationship(
