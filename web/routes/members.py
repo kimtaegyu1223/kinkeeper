@@ -6,11 +6,67 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from shared.db import get_session
-from shared.models import FamilyMember
+from shared.enums import ReminderType
+from shared.models import FamilyMember, ReminderRule
+from shared.scheduler_utils import rebuild_for_rule
 from web.auth import verify_admin
 
 router = APIRouter(prefix="/members", dependencies=[Depends(verify_admin)])
 templates = Jinja2Templates(directory="web/templates")
+
+# 생일 알림 기본 리드타임: 7일 전, 3일 전, 당일
+_DEFAULT_BIRTHDAY_LEADS = [7, 3, 0]
+_DEFAULT_BIRTHDAY_HOUR = 9
+
+
+def _parse_lunar(month: str, day: str) -> date | None:
+    """음력 월/일 → DATE (연도는 2000으로 고정, 월/일만 의미 있음)."""
+    m = int(month) if month.strip() else 0
+    d = int(day) if day.strip() else 0
+    if m and d:
+        return date(2000, m, d)
+    return None
+
+
+def _ensure_birthday_rule(session: object, member: FamilyMember) -> ReminderRule | None:
+    """구성원에게 생일이 있으면 생일 알림 규칙을 자동 생성/갱신."""
+    from sqlalchemy.orm import Session as SASession
+
+    if not isinstance(session, SASession):
+        return None
+    if not member.birthday_solar and not member.birthday_lunar:
+        return None
+
+    # 이미 이 구성원의 생일 규칙이 있으면 config만 갱신
+    existing = session.scalar(
+        select(ReminderRule).where(
+            ReminderRule.type == ReminderType.birthday,
+            ReminderRule.config["member_id"].as_integer() == member.id,
+        )
+    )
+
+    use_lunar = bool(member.birthday_lunar and not member.birthday_solar)
+    config: dict[str, object] = {
+        "member_id": member.id,
+        "use_lunar": use_lunar,
+        "hour": _DEFAULT_BIRTHDAY_HOUR,
+    }
+
+    if existing:
+        existing.config = config
+        existing.lead_times_days = _DEFAULT_BIRTHDAY_LEADS
+        existing.active = True
+        return existing
+    else:
+        rule = ReminderRule(
+            type=ReminderType.birthday,
+            title=f"{member.name} 생일 알림",
+            lead_times_days=_DEFAULT_BIRTHDAY_LEADS,
+            config=config,
+            active=True,
+        )
+        session.add(rule)
+        return rule
 
 
 @router.get("", response_class=HTMLResponse)
@@ -25,15 +81,6 @@ def new_member_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "members/form.html", {"member": None})
 
 
-def _parse_lunar(month: str, day: str) -> date | None:
-    """음력 월/일 → DATE (연도는 2000으로 고정, 월/일만 의미 있음)."""
-    m = int(month) if month.strip() else 0
-    d = int(day) if day.strip() else 0
-    if m and d:
-        return date(2000, m, d)
-    return None
-
-
 @router.post("/new")
 def create_member(
     name: str = Form(...),
@@ -43,6 +90,7 @@ def create_member(
     birthday_lunar_day: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
+    rule_id: int | None = None
     with get_session() as session:
         member = FamilyMember(
             name=name.strip(),
@@ -52,6 +100,15 @@ def create_member(
             active=bool(active),
         )
         session.add(member)
+        session.flush()  # member.id 확보
+        rule = _ensure_birthday_rule(session, member)
+        if rule:
+            session.flush()
+            rule_id = rule.id
+
+    if rule_id:
+        rebuild_for_rule(rule_id)
+
     return RedirectResponse("/members", status_code=303)
 
 
@@ -72,6 +129,7 @@ def update_member(
     birthday_lunar_day: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
+    rule_id: int | None = None
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
         if member:
@@ -80,6 +138,14 @@ def update_member(
             member.birthday_solar = date.fromisoformat(birthday_solar) if birthday_solar else None
             member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
             member.active = bool(active)
+            rule = _ensure_birthday_rule(session, member)
+            if rule:
+                session.flush()
+                rule_id = rule.id
+
+    if rule_id:
+        rebuild_for_rule(rule_id)
+
     return RedirectResponse("/members", status_code=303)
 
 
