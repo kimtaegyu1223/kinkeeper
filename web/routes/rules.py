@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -71,7 +70,9 @@ def _get_members() -> list[FamilyMember]:
     with get_session() as session:
         return list(
             session.scalars(
-                select(FamilyMember).where(FamilyMember.active.is_(True)).order_by(FamilyMember.name)
+                select(FamilyMember)
+                .where(FamilyMember.active.is_(True))
+                .order_by(FamilyMember.name)
             ).all()
         )
 
@@ -122,9 +123,7 @@ def edit_rule_form(rule_id: int, request: Request) -> HTMLResponse:
 
 
 @router.post("/{rule_id}/edit")
-async def update_rule(
-    rule_id: int, request: Request, active: str = Form("")
-) -> RedirectResponse:
+async def update_rule(rule_id: int, request: Request, active: str = Form("")) -> RedirectResponse:
     form_data = await request.form()
     form = dict(form_data)
     rule_type = str(form.get("type") or "")
