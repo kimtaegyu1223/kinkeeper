@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from shared.db import get_session
-from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType
+from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
 from web.auth import verify_admin
 
 router = APIRouter(prefix="/health", dependencies=[Depends(verify_admin)])
@@ -108,6 +108,11 @@ def member_records(member_id: int, request: Request) -> HTMLResponse:
         for r in records:
             if r.check_type_id not in latest_by_type:
                 latest_by_type[r.check_type_id] = r
+        # check_type_id → MemberHealthCheckConfig 매핑
+        configs = session.scalars(
+            select(MemberHealthCheckConfig).where(MemberHealthCheckConfig.member_id == member_id)
+        ).all()
+        config_by_type: dict[int, MemberHealthCheckConfig] = {c.check_type_id: c for c in configs}
 
     return templates.TemplateResponse(
         request,
@@ -117,6 +122,7 @@ def member_records(member_id: int, request: Request) -> HTMLResponse:
             "check_types": check_types,
             "latest_by_type": latest_by_type,
             "all_records": records,
+            "config_by_type": config_by_type,
             "today": datetime.now(UTC).date(),
         },
     )
@@ -138,6 +144,37 @@ def add_record(
                 note=note.strip() or None,
             )
         )
+    return RedirectResponse(f"/health/records/{member_id}", status_code=303)
+
+
+@router.post("/members/{member_id}/config/{check_type_id}")
+def upsert_member_config(
+    member_id: int,
+    check_type_id: int,
+    period_years: str = Form(""),
+    active: str = Form(""),
+) -> RedirectResponse:
+    with get_session() as session:
+        config = session.scalar(
+            select(MemberHealthCheckConfig).where(
+                MemberHealthCheckConfig.member_id == member_id,
+                MemberHealthCheckConfig.check_type_id == check_type_id,
+            )
+        )
+        period: int | None = int(period_years) if period_years.strip() else None
+        is_active = bool(active)
+        if config is None:
+            session.add(
+                MemberHealthCheckConfig(
+                    member_id=member_id,
+                    check_type_id=check_type_id,
+                    period_years=period,
+                    active=is_active,
+                )
+            )
+        else:
+            config.period_years = period
+            config.active = is_active
     return RedirectResponse(f"/health/records/{member_id}", status_code=303)
 
 

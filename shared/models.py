@@ -50,6 +50,9 @@ class FamilyMember(Base):
     health_records: Mapped[list["HealthCheckRecord"]] = relationship(
         back_populates="member", cascade="all, delete-orphan", passive_deletes=True
     )
+    health_configs: Mapped[list["MemberHealthCheckConfig"]] = relationship(
+        back_populates="member", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class ReminderRule(Base):
@@ -148,6 +151,9 @@ class HealthCheckType(Base):
     records: Mapped[list["HealthCheckRecord"]] = relationship(
         back_populates="check_type", cascade="all, delete-orphan", passive_deletes=True
     )
+    member_configs: Mapped[list["MemberHealthCheckConfig"]] = relationship(
+        back_populates="check_type", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class HealthCheckRecord(Base):
@@ -173,3 +179,26 @@ class HealthCheckRecord(Base):
 
     member: Mapped[FamilyMember] = relationship(back_populates="health_records")
     check_type: Mapped[HealthCheckType] = relationship(back_populates="records")
+
+
+class MemberHealthCheckConfig(Base):
+    """구성원별 건강검진 주기 설정 (없으면 HealthCheckType 기본값 사용)."""
+
+    __tablename__ = "member_health_check_configs"
+    __table_args__ = (
+        UniqueConstraint("member_id", "check_type_id", name="uq_member_check_config"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    member_id: Mapped[int] = mapped_column(
+        ForeignKey("family_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    check_type_id: Mapped[int] = mapped_column(
+        ForeignKey("health_check_types.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    period_years: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None = 기본값 사용
+    # False = 이 사람은 이 검진 알림 끔
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    member: Mapped["FamilyMember"] = relationship(back_populates="health_configs")
+    check_type: Mapped["HealthCheckType"] = relationship(back_populates="member_configs")

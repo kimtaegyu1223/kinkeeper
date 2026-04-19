@@ -7,28 +7,48 @@
 <h3>검진 현황</h3>
 <table>
   <thead>
-    <tr><th>항목</th><th>주기</th><th>최근 검진일</th><th>다음 예정일</th><th>상태</th></tr>
+    <tr><th>항목</th><th>주기</th><th>최근 검진일</th><th>다음 예정일</th><th>상태</th><th>개인 설정</th></tr>
   </thead>
   <tbody>
     {% for ct in check_types %}
       {% if not ct.gender or ct.gender == member.gender %}
       {% set rec = latest_by_type.get(ct.id) %}
+      {% set cfg = config_by_type.get(ct.id) %}
+      {% set effective_period = cfg.period_years if (cfg and cfg.period_years is not none) else ct.period_years %}
       {% if rec %}
-        {% set next_year = rec.checked_at.year + ct.period_years %}
+        {% set next_year = rec.checked_at.year + effective_period %}
         {% set next_due = rec.checked_at.replace(year=next_year) %}
         {% set days_left = (next_due - today).days %}
       {% endif %}
-    <tr>
+    <tr {% if cfg and not cfg.active %}style="opacity:0.5"{% endif %}>
       <td>{{ ct.name }}</td>
-      <td>{{ ct.period_years }}년</td>
+      <td>{{ effective_period }}년{% if cfg and cfg.period_years is not none %} <small style="color:var(--muted)">(기본: {{ ct.period_years }}년)</small>{% endif %}</td>
       <td>{{ rec.checked_at.strftime("%Y-%m-%d") if rec else "—" }}</td>
       <td>{{ next_due.strftime("%Y-%m-%d") if rec else "—" }}</td>
       <td>
-        {% if not rec %}⚪ 기록없음
+        {% if cfg and not cfg.active %}🔕 알림 끔
+        {% elif not rec %}⚪ 기록없음
         {% elif days_left < 0 %}⚠️ {{ days_left|abs }}일 초과
         {% elif days_left <= 30 %}🔜 {{ days_left }}일 후
         {% else %}✅ {{ days_left }}일 후
         {% endif %}
+      </td>
+      <td>
+        <form method="post" action="/health/members/{{ member.id }}/config/{{ ct.id }}"
+              style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap">
+          <label style="display:flex; align-items:center; gap:0.2rem; font-size:0.85rem">
+            주기(년)
+            <input type="number" name="period_years" min="1" max="20" style="width:4rem"
+                   value="{{ cfg.period_years if (cfg and cfg.period_years is not none) else '' }}"
+                   placeholder="{{ ct.period_years }}">
+          </label>
+          <label style="display:flex; align-items:center; gap:0.2rem; font-size:0.85rem">
+            <input type="checkbox" name="active" value="1"
+                   {% if not cfg or cfg.active %}checked{% endif %}>
+            알림
+          </label>
+          <button type="submit" style="padding:0.2rem 0.5rem; font-size:0.8rem">저장</button>
+        </form>
       </td>
     </tr>
       {% endif %}

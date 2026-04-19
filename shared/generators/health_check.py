@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from shared.config import settings
 from shared.generators.base import upsert_notification_by_key
-from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType
+from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
 
 
 def _add_years(d: date, years: int) -> date:
@@ -45,6 +45,20 @@ def rebuild_health_checks(session: Session, horizon_days: int = 60) -> None:
             if ct.gender and member.gender != ct.gender:
                 continue
 
+            config = session.scalar(
+                select(MemberHealthCheckConfig).where(
+                    MemberHealthCheckConfig.member_id == member.id,
+                    MemberHealthCheckConfig.check_type_id == ct.id,
+                )
+            )
+            if config is not None and not config.active:
+                continue
+            period = (
+                config.period_years
+                if (config and config.period_years is not None)
+                else ct.period_years
+            )
+
             latest_record = session.scalar(
                 select(HealthCheckRecord)
                 .where(
@@ -55,7 +69,7 @@ def rebuild_health_checks(session: Session, horizon_days: int = 60) -> None:
                 .limit(1)
             )
             latest_date = latest_record.checked_at if latest_record else None
-            due_date = _next_due(latest_date, ct.period_years, today)
+            due_date = _next_due(latest_date, period, today)
 
             if due_date <= today:
                 _schedule_overdue_nudge(session, member, ct, today, horizon, group_chat_id)
