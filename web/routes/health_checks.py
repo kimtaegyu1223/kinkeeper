@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from shared.db import get_session
 from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
@@ -108,6 +109,7 @@ def member_records(member_id: int, request: Request) -> HTMLResponse:
             select(HealthCheckRecord)
             .where(HealthCheckRecord.member_id == member_id)
             .order_by(HealthCheckRecord.check_type_id, HealthCheckRecord.checked_at.desc())
+            .options(selectinload(HealthCheckRecord.check_type))
         ).all()
         # check_type_id → 최근 기록 매핑
         latest_by_type: dict[int, HealthCheckRecord] = {}
