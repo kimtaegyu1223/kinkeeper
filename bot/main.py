@@ -2,7 +2,7 @@ import structlog
 from telegram.ext import Application, CommandHandler
 
 from bot.handlers.basic import help_command, start
-from bot.handlers.query import upcoming_command
+from bot.handlers.query import birthday_command, upcoming_command
 from bot.handlers.weight import weight_command
 from bot.scheduler import create_scheduler, rebuild_upcoming_async
 from shared.config import settings
@@ -27,6 +27,7 @@ def main() -> None:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("몸무게", weight_command))
     app.add_handler(CommandHandler("다음일정", upcoming_command))
+    app.add_handler(CommandHandler("내생일", birthday_command))
 
     async def on_startup(app: Application) -> None:  # type: ignore[type-arg]
         scheduler.start()
