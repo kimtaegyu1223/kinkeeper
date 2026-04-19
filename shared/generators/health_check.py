@@ -42,7 +42,7 @@ def rebuild_health_checks(session: Session, horizon_days: int = 60) -> None:
 
     for member in members:
         for ct in check_types:
-            if ct.gender and member.gender != ct.gender:
+            if ct.gender and member.gender and member.gender != ct.gender:
                 continue
 
             # 나이 제한 체크
