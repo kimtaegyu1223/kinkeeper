@@ -40,6 +40,8 @@ class FamilyMember(Base):
     gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=미설정
     timezone: Mapped[str] = mapped_column(String(50), default="Asia/Seoul", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 키 (cm)
+    diet_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

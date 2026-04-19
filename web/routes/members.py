@@ -90,6 +90,8 @@ def create_member(
     birthday_lunar_day: str = Form(""),
     gender: str = Form(""),
     active: str = Form(""),
+    height_cm: str = Form(""),
+    diet_active: str = Form(""),
 ) -> RedirectResponse:
     rule_id: int | None = None
     with get_session() as session:
@@ -100,6 +102,8 @@ def create_member(
             birthday_lunar=_parse_lunar(birthday_lunar_month, birthday_lunar_day),
             gender=_parse_gender(gender),
             active=bool(active),
+            height_cm=int(height_cm) if height_cm.strip() else None,
+            diet_active=bool(diet_active),
         )
         session.add(member)
         session.flush()
@@ -131,6 +135,8 @@ def update_member(
     birthday_lunar_day: str = Form(""),
     gender: str = Form(""),
     active: str = Form(""),
+    height_cm: str = Form(""),
+    diet_active: str = Form(""),
 ) -> RedirectResponse:
     rule_id: int | None = None
     with get_session() as session:
@@ -142,6 +148,8 @@ def update_member(
             member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
             member.gender = _parse_gender(gender)
             member.active = bool(active)
+            member.height_cm = int(height_cm) if height_cm.strip() else None
+            member.diet_active = bool(diet_active)
             rule = _ensure_birthday_rule(session, member)
             if rule:
                 session.flush()

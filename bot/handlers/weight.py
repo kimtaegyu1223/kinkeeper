@@ -81,6 +81,30 @@ async def weight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     member_id = member.id
     await asyncio.to_thread(_save_weight, member_id, weight_kg)
 
+    # 이번 주 남은 nudge 취소
+    from datetime import timedelta
+
+    from shared.enums import NotificationStatus
+    from shared.models import ScheduledNotification
+
+    today = datetime.now(UTC).date()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+
+    with get_session() as cancel_session:
+        pending_nudges = cancel_session.scalars(
+            select(ScheduledNotification).where(
+                ScheduledNotification.source_key.like(f"diet:nudge:{member_id}:%"),
+                ScheduledNotification.status == NotificationStatus.pending,
+                ScheduledNotification.scheduled_at
+                >= datetime(monday.year, monday.month, monday.day, tzinfo=UTC),
+                ScheduledNotification.scheduled_at
+                <= datetime(sunday.year, sunday.month, sunday.day, 23, 59, tzinfo=UTC),
+            )
+        ).all()
+        for n in pending_nudges:
+            n.status = NotificationStatus.cancelled
+
     prev = await asyncio.to_thread(_get_previous_weight, member_id)
 
     if prev is not None:

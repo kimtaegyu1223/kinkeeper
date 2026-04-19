@@ -60,6 +60,18 @@
     <small>여성 전용 검진 항목(유방초음파 등) 필터링에 사용됩니다.</small>
   </label>
   <label>
+    키 (cm)
+    <input name="height_cm" type="number" min="100" max="250"
+           value="{{ member.height_cm if member and member.height_cm else '' }}"
+           placeholder="예: 175" />
+    <small>BMI 계산에 사용됩니다.</small>
+  </label>
+  <label>
+    <input name="diet_active" type="checkbox"
+           {{ "checked" if member and member.diet_active else "" }} />
+    다이어트 알림 활성 (주간 몸무게 입력 알림 + 격주 BMI 리포트)
+  </label>
+  <label>
     활성
     <input name="active" type="checkbox"
            {{ "checked" if not member or member.active else "" }} />

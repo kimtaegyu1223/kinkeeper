@@ -3,7 +3,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from shared.enums import ReminderType
-from shared.generators import birthday, custom, diet_report, holiday
+from shared.generators import birthday, custom, holiday
 from shared.models import ReminderRule
 
 GeneratorFn = Callable[[ReminderRule, Session, int], None]
@@ -12,7 +12,6 @@ _REGISTRY: dict[ReminderType, GeneratorFn] = {
     ReminderType.birthday: birthday.generate,
     ReminderType.holiday: holiday.generate,
     ReminderType.custom: custom.generate,
-    ReminderType.diet_report: diet_report.generate,
 }
 
 
