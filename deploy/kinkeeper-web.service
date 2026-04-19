@@ -1,0 +1,16 @@
+[Unit]
+Description=KinKeeper Admin Web
+After=network-online.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ktg
+WorkingDirectory=/home/ktg/projects/kinkeeper
+ExecStart=/home/ktg/projects/kinkeeper/.venv/bin/uvicorn web.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/home/ktg/projects/kinkeeper/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -15,34 +15,117 @@ A self-hosted family assistant bot that keeps track of birthdays, holidays, heal
 
 ## 스택
 
-- Python 3.12, uv
+- Python 3.12 + uv
 - python-telegram-bot v21 (polling)
 - FastAPI + Jinja2 + HTMX (관리자 웹)
-- PostgreSQL 16 (docker-compose)
+- PostgreSQL 16
 - SQLAlchemy 2.0 + Alembic
 - APScheduler (봇 프로세스 내장)
-- systemd (운영)
+- systemd (운영 서버)
 
 ## 아키텍처 개요
 
 ```
-┌───────────┐         ┌───────────┐
-│  bot 프로세스  │         │  web 프로세스  │
-│  polling +   │         │  FastAPI +    │
-│  scheduler   │         │  HTMX admin   │
-└──────┬──────┘         └──────┬──────┘
-       │                        │
-       └──────── PostgreSQL ────┘
+┌─────────────────┐       ┌─────────────────┐
+│   bot 프로세스    │       │   web 프로세스    │
+│  polling +      │       │  FastAPI +       │
+│  APScheduler    │       │  HTMX admin UI   │
+└────────┬────────┘       └────────┬─────────┘
+         │                         │
+         └──────── PostgreSQL ──────┘
+                  (shared/)
 ```
 
 두 프로세스는 서로 import하지 않음. 공통 코드는 `shared/`.
 
 ## 로컬 개발
 
+### 사전 준비
+
 ```bash
-# (작성 예정)
+# uv 설치
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# docker-compose-plugin 설치 (PostgreSQL용)
+sudo apt install docker-compose-plugin -y
+```
+
+### 실행
+
+```bash
+# 1. 저장소 클론
+git clone https://github.com/kimtaegyu1223/kinkeeper.git
+cd kinkeeper
+
+# 2. .env 파일 생성
+cp .env.example .env
+# .env에 TELEGRAM_BOT_TOKEN, ADMIN_PASSWORD_HASH 입력
+
+# 관리자 비밀번호 해시 생성
+python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
+
+# 3. 의존성 설치
+uv sync
+
+# 4. PostgreSQL 기동
+docker compose up -d db
+
+# 5. DB 마이그레이션
+uv run alembic upgrade head
+
+# 6. 봇 실행
+uv run python -m bot.main
+
+# 7. 웹 실행 (새 터미널)
+uv run uvicorn web.main:app --host 127.0.0.1 --port 8000 --reload
+# http://localhost:8000 접속
+```
+
+## 운영 서버 배포 (Ubuntu)
+
+### PostgreSQL 설치
+
+```bash
+sudo apt install postgresql postgresql-contrib -y
+sudo -u postgres createuser --pwprompt family
+sudo -u postgres createdb -O family family_notifier
+```
+
+### systemd 서비스 등록
+
+```bash
+sudo cp deploy/kinkeeper-bot.service /etc/systemd/system/
+sudo cp deploy/kinkeeper-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kinkeeper-bot kinkeeper-web
+```
+
+### 로그 확인
+
+```bash
+journalctl -u kinkeeper-bot -f
+journalctl -u kinkeeper-web -f
+```
+
+### 업데이트 배포
+
+```bash
+bash deploy/deploy.sh
+```
+
+### 일일 백업 설정
+
+```bash
+crontab -e
+# 추가: 0 2 * * * bash /home/ktg/projects/kinkeeper/deploy/pg_backup.sh
+```
+
+## 테스트
+
+```bash
+uv run pytest -v
 ```
 
 ## 라이선스
 
-MIT (예정)
+MIT

@@ -1,0 +1,16 @@
+[Unit]
+Description=KinKeeper Telegram Bot
+After=network-online.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ktg
+WorkingDirectory=/home/ktg/projects/kinkeeper
+ExecStart=/home/ktg/projects/kinkeeper/.venv/bin/python -m bot.main
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/home/ktg/projects/kinkeeper/.env
+
+[Install]
+WantedBy=multi-user.target
