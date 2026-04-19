@@ -21,9 +21,7 @@ def rebuild_upcoming(session: Session, horizon_days: int = 60) -> None:
     """모든 활성 규칙에 대해 horizon_days 이내 예정 알림을 생성/보충."""
     from sqlalchemy import select
 
-    rules = session.scalars(
-        select(ReminderRule).where(ReminderRule.active.is_(True))
-    ).all()
+    rules = session.scalars(select(ReminderRule).where(ReminderRule.active.is_(True))).all()
 
     for rule in rules:
         generator = _REGISTRY.get(rule.type)
