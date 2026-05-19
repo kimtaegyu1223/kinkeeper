@@ -1,7 +1,9 @@
 from datetime import date, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
+from shared.config import settings
 from shared.enums import ReminderType
 from shared.generators.birthday import generate
 from shared.models import FamilyMember, ReminderRule, ScheduledNotification
@@ -54,6 +56,7 @@ def test_birthday_generates_notifications(rule, member, db_session) -> None:
     assert 1 in scheduled_leads
     assert 0 in scheduled_leads
     assert 7 not in scheduled_leads  # 7일 전은 오늘보다 이전이므로 생성 안 됨
+    assert all(n.scheduled_at.astimezone(ZoneInfo(settings.tz)).hour == 9 for n in notifications)
 
 
 def test_birthday_idempotent(rule, member, db_session) -> None:

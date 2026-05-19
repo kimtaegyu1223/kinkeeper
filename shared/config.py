@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     # App
     tz: str = "Asia/Seoul"
     log_level: str = "INFO"
-    schedule_horizon_days: int = 60
+    schedule_horizon_days: int = 365
+    weight_feature_enabled: bool = False
 
 
 settings = Settings()

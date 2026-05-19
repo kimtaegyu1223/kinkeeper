@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from shared.config import settings
 from shared.db import get_session
@@ -48,6 +49,18 @@ def _mark_cancelled(notification_id: int) -> None:
         row.status = NotificationStatus.cancelled
 
 
+def _cancel_pending_diet_notifications(session: Session) -> int:
+    rows = session.scalars(
+        select(ScheduledNotification).where(
+            ScheduledNotification.source_key.like("diet:%"),
+            ScheduledNotification.status == NotificationStatus.pending,
+        )
+    ).all()
+    for row in rows:
+        row.status = NotificationStatus.cancelled
+    return len(rows)
+
+
 def _has_weight_log_this_week(member_id: int) -> bool:
     """이번 주(월~일) 몸무게 기록이 있는지 확인."""
     from shared.models import WeightLog
@@ -85,8 +98,17 @@ def _do_rebuild() -> None:
     with get_session() as session:
         rebuild_upcoming(session, horizon_days=settings.schedule_horizon_days)
         rebuild_health_checks(session, horizon_days=settings.schedule_horizon_days)
-        rebuild_diet_reports(session, horizon_days=settings.schedule_horizon_days)
-    log.info("알림 예정 재생성 완료", horizon_days=settings.schedule_horizon_days)
+        cancelled_diet_count = 0
+        if settings.weight_feature_enabled:
+            rebuild_diet_reports(session, horizon_days=settings.schedule_horizon_days)
+        else:
+            cancelled_diet_count = _cancel_pending_diet_notifications(session)
+    log.info(
+        "알림 예정 재생성 완료",
+        horizon_days=settings.schedule_horizon_days,
+        weight_feature_enabled=settings.weight_feature_enabled,
+        cancelled_diet_count=cancelled_diet_count,
+    )
 
 
 async def dispatch_pending() -> None:
@@ -97,6 +119,10 @@ async def dispatch_pending() -> None:
 
     log.info("발송 대기 알림 처리", count=len(pending))
     for notification_id, chat_id, message, source_key in pending:
+        if source_key and source_key.startswith("diet:") and not settings.weight_feature_enabled:
+            await asyncio.to_thread(_mark_cancelled, notification_id)
+            continue
+
         # diet nudge: 이번 주 기록이 있으면 취소
         if source_key and source_key.startswith("diet:nudge:"):
             parts = source_key.split(":")

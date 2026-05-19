@@ -4,14 +4,35 @@ reminder_rules 대신 health_check_types + health_check_records 를 직접 참�
 rebuild_health_checks() 를 scheduler에서 rebuild_upcoming() 과 함께 호출.
 """
 
+from collections import defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from html import escape
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.enums import NotificationStatus
 from shared.generators.base import upsert_notification_by_key
-from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
+from shared.models import (
+    FamilyMember,
+    HealthCheckRecord,
+    HealthCheckType,
+    MemberHealthCheckConfig,
+    ScheduledNotification,
+)
+
+
+@dataclass(frozen=True)
+class _HealthReportItem:
+    member_id: int
+    member_name: str
+    check_name: str
+    due_date: date
+    latest_checked: date | None
 
 
 def _add_years(d: date, years: int) -> date:
@@ -29,16 +50,84 @@ def _next_due(latest_checked: date | None, period_years: int, today: date) -> da
     return _add_years(latest_checked, period_years)
 
 
+def _today_local() -> date:
+    return datetime.now(ZoneInfo(settings.tz)).date()
+
+
+def _scheduled_at_local(day: date, hour: int = 9) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
+        UTC
+    )
+
+
+def _upsert_health_notification(
+    session: Session,
+    source_key: str,
+    scheduled_at: datetime,
+    target_telegram_id: int,
+    message: str,
+) -> None:
+    existing = session.scalar(
+        select(ScheduledNotification).where(
+            ScheduledNotification.source_key == source_key,
+            ScheduledNotification.status == NotificationStatus.pending,
+        )
+    )
+    if existing:
+        existing.scheduled_at = scheduled_at
+        existing.target_telegram_id = target_telegram_id
+        existing.message = message
+        return
+
+    upsert_notification_by_key(session, source_key, scheduled_at, target_telegram_id, message)
+
+
+def _cancel_stale_health_notifications(session: Session, desired_source_keys: set[str]) -> None:
+    rows = session.scalars(
+        select(ScheduledNotification).where(
+            ScheduledNotification.source_key.like("hc:%"),
+            ScheduledNotification.status == NotificationStatus.pending,
+        )
+    ).all()
+    for row in rows:
+        if row.source_key not in desired_source_keys:
+            row.status = NotificationStatus.cancelled
+
+
 def rebuild_health_checks(
     session: Session, horizon_days: int = 60, _today: date | None = None
 ) -> None:
-    """모든 활성 구성원 × 활성 검진 항목 조합으로 알림 예약.
+    """월 1회 가족방 건강검진 리포트를 예약.
 
     _today: 테스트용 날짜 주입 (None이면 오늘 사용)
     """
-    today = _today or datetime.now(UTC).date()
+    today = _today or _today_local()
     horizon = today + timedelta(days=horizon_days)
     group_chat_id = settings.group_chat_id
+    report_items = _collect_report_items(session, today)
+    desired_source_keys: set[str] = set()
+
+    report_date = _first_report_date(today)
+    while report_date <= horizon:
+        next_report_date = _first_of_next_month(report_date)
+        month_items = [item for item in report_items if item.due_date < next_report_date]
+        if month_items:
+            source_key = f"hc:monthly:group:{report_date.isoformat()}"
+            desired_source_keys.add(source_key)
+            _upsert_health_notification(
+                session,
+                source_key,
+                _scheduled_at_local(report_date),
+                group_chat_id,
+                _format_monthly_report(month_items, report_date),
+            )
+        report_date = next_report_date
+
+    _cancel_stale_health_notifications(session, desired_source_keys)
+
+
+def _collect_report_items(session: Session, today: date) -> list[_HealthReportItem]:
+    items: list[_HealthReportItem] = []
 
     members = session.scalars(select(FamilyMember).where(FamilyMember.active.is_(True))).all()
     check_types = session.scalars(
@@ -86,40 +175,17 @@ def rebuild_health_checks(
             latest_date = latest_record.checked_at if latest_record else None
             due_date = _next_due(latest_date, period, today)
 
-            if due_date <= today:
-                _schedule_overdue(session, member, ct, today, horizon, group_chat_id)
-            elif due_date <= horizon:
-                _schedule_upcoming(session, member, ct, due_date, today, group_chat_id)
-
-
-def _schedule_upcoming(
-    session: Session,
-    member: FamilyMember,
-    ct: HealthCheckType,
-    due_date: date,
-    today: date,
-    chat_id: int,
-) -> None:
-    for lead in [30, 14, 7, 0]:
-        notify_date = due_date - timedelta(days=lead)
-        if notify_date < today:
-            continue
-        scheduled_at = datetime(
-            notify_date.year, notify_date.month, notify_date.day, 9, 0, tzinfo=UTC
-        )
-        source_key = f"hc:upcoming:{member.id}:{ct.id}:{notify_date.isoformat()}"
-        if lead == 0:
-            msg = (
-                f"🏥 <b>{member.name}</b>님, 오늘은 <b>{ct.name}</b> 검진일입니다!\n"
-                f"검진 후 봇에게 알려주세요 → <code>/검진완료 {ct.name}</code>"
+            items.append(
+                _HealthReportItem(
+                    member_id=member.id,
+                    member_name=member.name,
+                    check_name=ct.name,
+                    due_date=due_date,
+                    latest_checked=latest_date,
+                )
             )
-        else:
-            msg = (
-                f"🏥 <b>{member.name}</b>님의 <b>{ct.name}</b> 검진이 "
-                f"<b>{lead}일 후</b>입니다. ({due_date.strftime('%m/%d')})\n"
-                f"예약을 미리 잡아두세요!"
-            )
-        upsert_notification_by_key(session, source_key, scheduled_at, chat_id, msg)
+
+    return items
 
 
 def _first_of_next_month(d: date) -> date:
@@ -129,42 +195,23 @@ def _first_of_next_month(d: date) -> date:
     return d.replace(month=d.month + 1, day=1)
 
 
-def _schedule_overdue(
-    session: Session,
-    member: FamilyMember,
-    ct: HealthCheckType,
-    today: date,
-    horizon: date,
-    group_chat_id: int,
-) -> None:
-    """미수검 알림:
-    - 그룹 채널: 월 1회 (매월 1일 9시)
-    - 개인 DM: 주 1회 (7일 간격, telegram_user_id 있는 경우만)
-    """
-    # 그룹 채널 — 월 1회
-    monthly = _first_of_next_month(today)
-    while monthly <= horizon:
-        scheduled_at = datetime(monthly.year, monthly.month, monthly.day, 9, 0, tzinfo=UTC)
-        source_key = f"hc:overdue:group:{member.id}:{ct.id}:{monthly.isoformat()}"
-        msg = (
-            f"📋 <b>[건강검진 미수검]</b>\n"
-            f"<b>{member.name}</b>님 — <b>{ct.name}</b> 검진이 밀려 있습니다.\n"
-            f"검진 후 → <code>/검진완료 {ct.name}</code>"
-        )
-        upsert_notification_by_key(session, source_key, scheduled_at, group_chat_id, msg)
-        monthly = _first_of_next_month(monthly)
+def _first_report_date(today: date) -> date:
+    if today.day == 1:
+        return today
+    return _first_of_next_month(today)
 
-    # 개인 DM — 주 1회
-    if member.telegram_user_id:
-        nudge = today + timedelta(days=7)
-        while nudge <= horizon:
-            scheduled_at = datetime(nudge.year, nudge.month, nudge.day, 9, 0, tzinfo=UTC)
-            source_key = f"hc:overdue:dm:{member.id}:{ct.id}:{nudge.isoformat()}"
-            msg = (
-                f"⚠️ <b>{ct.name}</b> 검진 시기가 지났어요!\n"
-                f"빨리 예약하고 검진 후 알려주세요 → <code>/검진완료 {ct.name}</code>"
-            )
-            upsert_notification_by_key(
-                session, source_key, scheduled_at, member.telegram_user_id, msg
-            )
-            nudge += timedelta(days=7)
+
+def _format_monthly_report(items: Iterable[_HealthReportItem], report_date: date) -> str:
+    grouped: dict[tuple[int, str], list[_HealthReportItem]] = defaultdict(list)
+    for item in items:
+        grouped[(item.member_id, item.member_name)].append(item)
+
+    report_month = f"{report_date.year}년 {report_date.month}월"
+    lines = [f"📋 <b>[{report_month} 건강검진]</b>"]
+    for (_, member_name), member_items in sorted(grouped.items(), key=lambda row: row[0][1]):
+        lines.append("")
+        lines.append(f"<b>{escape(member_name)}</b>")
+        for item in sorted(member_items, key=lambda row: (row.due_date, row.check_name)):
+            lines.append(f"• {escape(item.check_name)}")
+
+    return "\n".join(lines)

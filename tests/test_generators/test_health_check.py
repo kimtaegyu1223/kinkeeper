@@ -6,10 +6,11 @@
 - 실제 PostgreSQL (testcontainers) 사용 — mock 없음
 """
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
+from shared.enums import NotificationStatus
 from shared.generators.health_check import _first_of_next_month, rebuild_health_checks
 from shared.models import (
     FamilyMember,
@@ -62,8 +63,8 @@ def _all_notifs(session) -> list[ScheduledNotification]:
     return list(session.scalars(select(ScheduledNotification)))
 
 
-def _group(notifs):
-    return [n for n in notifs if "group" in (n.source_key or "")]
+def _monthly_reports(notifs):
+    return [n for n in notifs if (n.source_key or "").startswith("hc:monthly:group:")]
 
 
 def _dm(notifs):
@@ -79,14 +80,38 @@ def _upcoming(notifs):
 # ---------------------------------------------------------------------------
 
 
-def test_overdue_no_record_schedules_group_and_dm(member, check_type, db_session):
-    """검진 기록이 전혀 없으면 그룹 월간 + 개인 DM 주간 알림이 생성된다."""
+def test_no_record_schedules_monthly_family_report_only(member, check_type, db_session):
+    """검진 기록이 전혀 없으면 월간 가족방 리포트만 생성된다."""
     _rebuild(db_session)
     notifs = _all_notifs(db_session)
 
-    assert len(_group(notifs)) >= 1, "그룹 채널 월간 알림이 없음"
-    assert len(_dm(notifs)) >= 1, "개인 DM 주간 알림이 없음"
-    assert len(_upcoming(notifs)) == 0, "overdue인데 upcoming이 생기면 안 됨"
+    reports = _monthly_reports(notifs)
+    assert reports, "가족방 월간 리포트가 없음"
+    assert len(_dm(notifs)) == 0, "건강검진은 개인 DM을 보내면 안 됨"
+    assert len(_upcoming(notifs)) == 0, "건강검진은 개별 예정 알림을 만들면 안 됨"
+    assert all("일반건강검진" in row.message for row in reports)
+    assert all("검진 필요" not in row.message for row in reports)
+    assert all("미수검" not in row.message for row in reports)
+    assert all("예정" not in row.message for row in reports)
+    assert all("/검진완료" not in row.message for row in reports)
+
+
+def test_rebuild_cancels_existing_health_dm_notifications(member, check_type, db_session):
+    """예전 방식으로 쌓인 건강검진 개인 DM pending은 rebuild 때 취소한다."""
+    old_dm = ScheduledNotification(
+        source_key="hc:overdue:dm:1:2024-06-22",
+        scheduled_at=datetime(2024, 6, 22, 9, 0, tzinfo=UTC),
+        target_telegram_id=member.telegram_user_id or 11111,
+        message="old dm",
+    )
+    db_session.add(old_dm)
+    db_session.flush()
+
+    _rebuild(db_session)
+    notifs = _all_notifs(db_session)
+
+    assert old_dm.status == NotificationStatus.cancelled
+    assert [n for n in _dm(notifs) if n.status == NotificationStatus.pending] == []
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +131,36 @@ def test_overdue_old_record(member, check_type, db_session):
     _rebuild(db_session)
     notifs = _all_notifs(db_session)
 
-    assert len(_group(notifs)) >= 1
-    assert len(_dm(notifs)) >= 1
+    assert len(_monthly_reports(notifs)) >= 1
+    assert len(_dm(notifs)) == 0
+
+
+def test_monthly_report_groups_multiple_checks_for_same_member(member, check_type, db_session):
+    """한 사람의 확인 항목 여러 개를 월간 리포트 하나에 묶는다."""
+    second = HealthCheckType(name="위내시경", period_years=1, active=True)
+    db_session.add(second)
+    db_session.flush()
+
+    _rebuild(db_session)
+    notifs = _all_notifs(db_session)
+    reports = _monthly_reports(notifs)
+
+    assert reports
+    assert len(_dm(notifs)) == 0
+    assert all("일반건강검진" in row.message and "위내시경" in row.message for row in reports)
+
+
+def test_monthly_report_groups_multiple_members(member, check_type, db_session):
+    """가족방 월간 리포트는 여러 사람을 한 메시지에 모은다."""
+    other = FamilyMember(name="김영희", telegram_user_id=22222, active=True)
+    db_session.add(other)
+    db_session.flush()
+
+    _rebuild(db_session)
+    reports = _monthly_reports(_all_notifs(db_session))
+
+    assert reports
+    assert all("홍길동" in row.message and "김영희" in row.message for row in reports)
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +169,7 @@ def test_overdue_old_record(member, check_type, db_session):
 
 
 def test_upcoming_within_horizon(member, check_type, db_session):
-    """20일 후가 검진 예정일이면 upcoming 알림(14/7/0일 전)이 생성된다."""
+    """20일 후가 검진 예정일이면 다음 월간 리포트에 포함된다."""
     # period=2년, 검진일이 TODAY+20일이 되려면 2년 전 - 20일에 받았어야 함
     last_checked = TODAY - timedelta(days=365 * 2 - 20)
     db_session.add(
@@ -126,10 +179,44 @@ def test_upcoming_within_horizon(member, check_type, db_session):
 
     _rebuild(db_session)
     notifs = _all_notifs(db_session)
-    up = _upcoming(notifs)
+    reports = _monthly_reports(notifs)
 
-    assert len(up) >= 1, "upcoming 알림이 없음"
-    assert len(_group(notifs)) == 0, "upcoming인데 overdue 그룹 공지가 생기면 안 됨"
+    assert reports, "월간 리포트가 없음"
+    assert len(_upcoming(notifs)) == 0, "개별 upcoming 알림이 생기면 안 됨"
+    assert len(_dm(notifs)) == 0, "건강검진은 개인 DM을 보내면 안 됨"
+    assert all("일반건강검진" in row.message for row in reports)
+
+
+def test_monthly_report_groups_multiple_upcoming_checks(member, check_type, db_session):
+    """같은 달에 확인할 검진 여러 개는 월간 리포트 하나에 묶는다."""
+    second = HealthCheckType(name="위내시경", period_years=2, active=True)
+    db_session.add(second)
+    db_session.flush()
+
+    last_checked = TODAY - timedelta(days=365 * 2 - 20)
+    db_session.add_all(
+        [
+            HealthCheckRecord(
+                member_id=member.id,
+                check_type_id=check_type.id,
+                checked_at=last_checked,
+            ),
+            HealthCheckRecord(
+                member_id=member.id,
+                check_type_id=second.id,
+                checked_at=last_checked,
+            ),
+        ]
+    )
+    db_session.flush()
+
+    _rebuild(db_session)
+    notifs = _all_notifs(db_session)
+    reports = _monthly_reports(notifs)
+
+    assert reports
+    assert len(_upcoming(notifs)) == 0
+    assert all("일반건강검진" in row.message and "위내시경" in row.message for row in reports)
 
 
 # ---------------------------------------------------------------------------
@@ -280,17 +367,18 @@ def test_member_config_period_override(member, check_type, db_session):
     notifs = _all_notifs(db_session)
 
     # 1년 기준 → overdue
-    assert len(_group(notifs)) >= 1, "1년 오버라이드 기준 overdue 그룹 알림 없음"
-    assert len(_upcoming(notifs)) == 0, "overdue인데 upcoming이 생기면 안 됨"
+    assert len(_monthly_reports(notifs)) >= 1, "1년 오버라이드 기준 월간 리포트 없음"
+    assert len(_upcoming(notifs)) == 0, "개별 upcoming 알림이 생기면 안 됨"
+    assert len(_dm(notifs)) == 0, "건강검진은 개인 DM을 보내면 안 됨"
 
 
 # ---------------------------------------------------------------------------
-# 10. telegram_user_id 없으면 DM 없음, 그룹만
+# 10. telegram_user_id 여부와 무관하게 DM 없음, 가족방 리포트만
 # ---------------------------------------------------------------------------
 
 
 def test_no_telegram_id_no_dm(db_session):
-    """telegram_user_id가 없으면 개인 DM은 생성되지 않고 그룹 알림만 생성된다."""
+    """telegram_user_id가 없어도 월간 가족방 리포트만 생성된다."""
     no_tg = FamilyMember(name="텔레없음", telegram_user_id=None, active=True)
     ct = HealthCheckType(name="혈액검사", period_years=1, active=True)
     db_session.add_all([no_tg, ct])
@@ -300,7 +388,7 @@ def test_no_telegram_id_no_dm(db_session):
     notifs = _all_notifs(db_session)
 
     assert len(_dm(notifs)) == 0, "telegram_user_id 없는데 DM이 생성됨"
-    assert len(_group(notifs)) >= 1, "그룹 알림은 있어야 함"
+    assert len(_monthly_reports(notifs)) >= 1, "가족방 월간 리포트는 있어야 함"
 
 
 # ---------------------------------------------------------------------------

@@ -29,10 +29,14 @@ async def _handle_korean_command(update: Update, context: ContextTypes.DEFAULT_T
 
     text = update.message.text
     if text.startswith("/몸무게"):
+        if not settings.weight_feature_enabled:
+            await update.message.reply_text("몸무게 기능은 현재 꺼져 있습니다.")
+            return
         # /몸무게로 시작하면 weight_command 호출
         context.args = text[4:].strip().split() if len(text) > 4 else []
         await weight_command(update, context)
     elif text.startswith("/다음일정"):
+        context.args = text[5:].strip().split() if len(text) > 5 else []
         await upcoming_command(update, context)
     elif text.startswith("/내생일"):
         await birthday_command(update, context)

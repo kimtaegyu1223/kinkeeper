@@ -6,6 +6,7 @@ from sqlalchemy import select
 from shared.db import get_session
 from shared.enums import ReminderType
 from shared.models import FamilyMember, ReminderRule
+from shared.scheduler_utils import rebuild_for_rule
 from web.auth import verify_admin
 
 router = APIRouter(prefix="/rules", dependencies=[Depends(verify_admin)])
@@ -101,15 +102,21 @@ async def create_rule(request: Request, active: str = Form("")) -> RedirectRespo
     title = str(form.get("title") or "").strip()
     config, leads = _build_config_and_leads(rule_type, {k: str(v) for k, v in form.items()})
 
+    rule_id: int | None = None
+    is_active = bool(active)
     with get_session() as session:
         rule = ReminderRule(
             type=ReminderType(rule_type),
             title=title,
             lead_times_days=leads,
             config=config,
-            active=bool(active),
+            active=is_active,
         )
         session.add(rule)
+        session.flush()
+        rule_id = rule.id
+    if is_active and rule_id:
+        rebuild_for_rule(rule_id)
     return RedirectResponse("/rules", status_code=303)
 
 
@@ -130,6 +137,7 @@ async def update_rule(rule_id: int, request: Request, active: str = Form("")) ->
     title = str(form.get("title") or "").strip()
     config, leads = _build_config_and_leads(rule_type, {k: str(v) for k, v in form.items()})
 
+    is_active = bool(active)
     with get_session() as session:
         rule = session.get(ReminderRule, rule_id)
         if rule:
@@ -137,7 +145,9 @@ async def update_rule(rule_id: int, request: Request, active: str = Form("")) ->
             rule.title = title
             rule.lead_times_days = leads
             rule.config = config
-            rule.active = bool(active)
+            rule.active = is_active
+    if is_active:
+        rebuild_for_rule(rule_id)
     return RedirectResponse("/rules", status_code=303)
 
 

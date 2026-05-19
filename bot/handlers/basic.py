@@ -1,6 +1,8 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from shared.config import settings
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
@@ -16,12 +18,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         return
+    commands = [
+        "<b>KinKeeper 명령어</b>",
+        "",
+        "/start — 시작",
+        "/help — 명령어 목록",
+    ]
+    if settings.weight_feature_enabled:
+        commands.append("/몸무게 [숫자] — 몸무게 기록 (예: /몸무게 67.2)")
+    commands.extend(
+        [
+            "/다음일정 [일수] — 예정 알림 확인 (예: /다음일정 60)",
+            "",
+            "일정 추가/수정은 관리자 웹에서 합니다.",
+        ]
+    )
     await update.message.reply_text(
-        "<b>KinKeeper 명령어</b>\n\n"
-        "/start — 시작\n"
-        "/help — 명령어 목록\n"
-        "/몸무게 [숫자] — 몸무게 기록 (예: /몸무게 67.2)\n"
-        "/다음일정 — 앞으로 7일 이내 알림 확인\n\n"
-        "일정 추가/수정은 관리자 웹에서 합니다.",
+        "\n".join(commands),
         parse_mode="HTML",
     )

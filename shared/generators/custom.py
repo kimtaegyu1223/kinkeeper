@@ -1,9 +1,22 @@
 from datetime import UTC, date, datetime, timedelta
+from html import escape
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.generators.base import get_target_telegram_ids, upsert_notification
 from shared.models import ReminderRule
+
+
+def _today_local() -> date:
+    return datetime.now(ZoneInfo(settings.tz)).date()
+
+
+def _scheduled_at_local(day: date, hour: int) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
+        UTC
+    )
 
 
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
@@ -55,7 +68,7 @@ def _generate_yearly(
 ) -> None:
     month = int(str(config.get("month") or 1))
     day = int(str(config.get("day") or 1))
-    today = datetime.now(UTC).date()
+    today = _today_local()
     horizon = today + timedelta(days=horizon_days)
 
     for year in (today.year, today.year + 1):
@@ -71,8 +84,14 @@ def _generate_yearly(
             notify_date = event_date - timedelta(days=lead)
             if notify_date < today:
                 continue
-            scheduled_at = datetime(
-                notify_date.year, notify_date.month, notify_date.day, hour, 0, tzinfo=UTC
-            )
+            scheduled_at = _scheduled_at_local(notify_date, hour)
+            message = _format_yearly_message(msg, lead, event_date)
             for tid in target_ids:
-                upsert_notification(session, rule, scheduled_at, tid, msg)
+                upsert_notification(session, rule, scheduled_at, tid, message)
+
+
+def _format_yearly_message(msg: str, lead: int, event_date: date) -> str:
+    escaped = escape(msg)
+    if lead == 0:
+        return f"오늘은 <b>{escaped}</b>입니다."
+    return f"<b>{escaped}</b> <b>{lead}일 전</b>입니다. ({event_date.strftime('%m/%d')})"
