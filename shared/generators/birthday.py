@@ -1,7 +1,9 @@
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.generators.base import get_target_telegram_ids, upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import FamilyMember, ReminderRule
@@ -26,6 +28,16 @@ def _resolve_birthday_solar(member: FamilyMember, use_lunar: bool, year: int) ->
     return member.birthday_solar
 
 
+def _today_local() -> date:
+    return datetime.now(ZoneInfo(settings.tz)).date()
+
+
+def _scheduled_at_local(day: date, hour: int) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
+        UTC
+    )
+
+
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
     member_id = rule.config.get("member_id")
     if not member_id:
@@ -38,7 +50,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     use_lunar = bool(rule.config.get("use_lunar", False))
     hour = int(rule.config.get("hour", 9))
 
-    today = datetime.now(UTC).date()
+    today = _today_local()
     horizon = today + timedelta(days=horizon_days)
 
     # 올해/내년 두 해 모두 시도 (음력은 매년 양력 날짜가 달라짐)
@@ -60,9 +72,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             notify_date = bday_solar - timedelta(days=lead)
             if notify_date < today:
                 continue
-            scheduled_at = datetime(
-                notify_date.year, notify_date.month, notify_date.day, hour, 0, tzinfo=UTC
-            )
+            scheduled_at = _scheduled_at_local(notify_date, hour)
             bday_label = "음력" if use_lunar else "양력"
             if lead == 0:
                 msg = f"🎂 오늘은 <b>{name}</b>님의 생일({bday_label})입니다! 축하해주세요 🎉"

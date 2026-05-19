@@ -1,10 +1,22 @@
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.generators.base import get_target_telegram_ids, upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import ReminderRule
+
+
+def _today_local() -> date:
+    return datetime.now(ZoneInfo(settings.tz)).date()
+
+
+def _scheduled_at_local(day: date, hour: int) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
+        UTC
+    )
 
 
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
@@ -16,7 +28,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     if not lunar_month or not lunar_day:
         return
 
-    today = datetime.now(UTC).date()
+    today = _today_local()
     horizon = today + timedelta(days=horizon_days)
 
     for year in (today.year, today.year + 1):
@@ -35,9 +47,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             notify_date = holiday_date - timedelta(days=lead)
             if notify_date < today:
                 continue
-            scheduled_at = datetime(
-                notify_date.year, notify_date.month, notify_date.day, hour, 0, tzinfo=UTC
-            )
+            scheduled_at = _scheduled_at_local(notify_date, hour)
             if lead == 0:
                 msg = f"🎊 오늘은 <b>{holiday_name}</b>입니다! 가족과 즐거운 시간 보내세요."
             elif lead <= 3:

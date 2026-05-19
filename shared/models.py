@@ -40,6 +40,8 @@ class FamilyMember(Base):
     gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=미설정
     timezone: Mapped[str] = mapped_column(String(50), default="Asia/Seoul", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 키 (cm)
+    diet_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -48,6 +50,9 @@ class FamilyMember(Base):
         back_populates="member", cascade="all, delete-orphan", passive_deletes=True
     )
     health_records: Mapped[list["HealthCheckRecord"]] = relationship(
+        back_populates="member", cascade="all, delete-orphan", passive_deletes=True
+    )
+    health_configs: Mapped[list["MemberHealthCheckConfig"]] = relationship(
         back_populates="member", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -143,9 +148,13 @@ class HealthCheckType(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     period_years: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=모두
+    min_age: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None = 나이 제한 없음
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     records: Mapped[list["HealthCheckRecord"]] = relationship(
+        back_populates="check_type", cascade="all, delete-orphan", passive_deletes=True
+    )
+    member_configs: Mapped[list["MemberHealthCheckConfig"]] = relationship(
         back_populates="check_type", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -173,3 +182,26 @@ class HealthCheckRecord(Base):
 
     member: Mapped[FamilyMember] = relationship(back_populates="health_records")
     check_type: Mapped[HealthCheckType] = relationship(back_populates="records")
+
+
+class MemberHealthCheckConfig(Base):
+    """구성원별 건강검진 주기 설정 (없으면 HealthCheckType 기본값 사용)."""
+
+    __tablename__ = "member_health_check_configs"
+    __table_args__ = (
+        UniqueConstraint("member_id", "check_type_id", name="uq_member_check_config"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    member_id: Mapped[int] = mapped_column(
+        ForeignKey("family_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    check_type_id: Mapped[int] = mapped_column(
+        ForeignKey("health_check_types.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    period_years: Mapped[int | None] = mapped_column(Integer, nullable=True)  # None = 기본값 사용
+    # False = 이 사람은 이 검진 알림 끔
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    member: Mapped["FamilyMember"] = relationship(back_populates="health_configs")
+    check_type: Mapped["HealthCheckType"] = relationship(back_populates="member_configs")

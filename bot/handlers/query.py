@@ -1,16 +1,22 @@
 import asyncio
+import re
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from html import escape
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from shared.config import settings
 from shared.db import get_session
 from shared.enums import NotificationStatus
 from shared.models import FamilyMember, ScheduledNotification
 
 
-def _get_upcoming(days: int = 7) -> list[ScheduledNotification]:
+def _get_upcoming(days: int | None = None, limit: int = 100) -> list[ScheduledNotification]:
+    days = days or settings.schedule_horizon_days
     now = datetime.now(UTC)
     until = now + timedelta(days=days)
     with get_session() as session:
@@ -22,10 +28,27 @@ def _get_upcoming(days: int = 7) -> list[ScheduledNotification]:
                 ScheduledNotification.status == NotificationStatus.pending,
             )
             .order_by(ScheduledNotification.scheduled_at)
-            .limit(10)
+            .limit(limit)
         ).all()
         # 세션 닫히기 전에 데이터 확보
         return list(rows)
+
+
+def _parse_days_arg(args: Sequence[str] | None) -> int:
+    if not args:
+        return settings.schedule_horizon_days
+    try:
+        days = int(args[0])
+    except ValueError:
+        return settings.schedule_horizon_days
+    return min(max(days, 1), 365)
+
+
+def _preview_message(message: str) -> str:
+    text = re.sub(r"<[^>]+>", "", message).replace("\n", " ")
+    if len(text) <= 90:
+        return text
+    return f"{text[:87]}..."
 
 
 def _get_member_by_telegram_id(telegram_user_id: int) -> FamilyMember | None:
@@ -43,16 +66,19 @@ async def upcoming_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if update.message is None:
         return
 
-    rows = await asyncio.to_thread(_get_upcoming)
+    days = _parse_days_arg(context.args)
+    rows = await asyncio.to_thread(_get_upcoming, days)
 
     if not rows:
-        await update.message.reply_text("앞으로 7일 이내 예정된 알림이 없습니다.")
+        await update.message.reply_text(f"앞으로 {days}일 이내 예정된 알림이 없습니다.")
         return
 
-    lines = ["<b>📅 앞으로 7일 예정 알림</b>\n"]
+    tz = ZoneInfo(settings.tz)
+    lines = [f"<b>📅 앞으로 {days}일 예정 알림</b>\n"]
     for row in rows:
-        kst = row.scheduled_at.astimezone(UTC)
-        lines.append(f"• {kst.strftime('%m/%d %H:%M')} — {row.message[:40]}")
+        local_time = row.scheduled_at.astimezone(tz)
+        preview = escape(_preview_message(row.message))
+        lines.append(f"• {local_time.strftime('%m/%d %H:%M')} - {preview}")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
