@@ -23,7 +23,7 @@
 - 원계획: arch-p2-plan.json의 refactor_p3 중 결정 비의존 항목(시간헬퍼 통합/target_ids 제거/upsert 통일+ON CONFLICT/timezone 컬럼 제거/타입 정합화/TypedDict/job-queue extra). 결정 의존 부분(enum diet 값, horizon 값, 음력 스키마)은 P7 이후로.
 - [x] P4. 완료 (2026-07-10): 2커밋(57b7ae9 죽은코드, 57fcec0 주석) — 낡은 주석 5건 정정(취소→삭제, 격주 요일), 관문 모듈 독스트링 4건, 노이즈 제거. 148 passed.
 - [x] P5. 완료 (2026-07-10): 4커밋(b6aae48 README, 8c62da3 ARCHITECTURE 재작성, db3a7dd OPERATIONS 신설, web/README 현행화). 문서-코드 불일치 8건 정정(건강검진 알림 방식, 상태값 failed, 다이어트 플래그, 프로세스 3유닛 등). .env.example은 검증 결과 수정 불필요.
-- [ ] P6. 테스트 보강 (누락 영역) + 커밋
+- [x] P6. 완료 (2026-07-10): 1커밋(8945e0d) — alembic 체인·스키마 정합·downgrade 검증 추가(148→150). notifier/config는 P1 커버 확인으로 중복 작성 안 함.
 - [ ] P7. 최종 검증(전체 테스트/린트/타입) → main 머지 + 서비스 재시작 (사용자 확인 후)
 
 ## 워크플로 실행 기록
