@@ -1,7 +1,9 @@
 """diet_report BMI 리포트 generator 테스트."""
 
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
+import shared.generators.diet_report as diet_module
 from shared.enums import NotificationStatus
 from shared.generators.diet_report import build_bmi_report, rebuild_diet_reports
 from shared.models import FamilyMember, ScheduledNotification, WeightLog
@@ -117,6 +119,50 @@ def test_rebuild_preserves_desired_notifications(db_session) -> None:
     db_session.flush()
     still_pending = {n.id for n in _pending_diet(db_session)}
     assert first_ids <= still_pending
+
+
+def test_rebuild_does_not_resend_sent_nudge_today(db_session, monkeypatch) -> None:
+    """당일 09시에 이미 발송된(sent) nudge를 오후 rebuild가 새 pending으로 재생성하지 않는다.
+
+    sent 행은 pending 한정 유니크 인덱스에 없어 upsert가 재삽입하므로, 시각 가드가 없으면
+    당일 재시작 배포마다 같은 nudge가 재발송된다 (audit #1)."""
+    # 이번 주 월요일 2026-07-06, 오늘은 수요일 2026-07-08
+    today = date(2026, 7, 8)
+    now = datetime(2026, 7, 8, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
+    monkeypatch.setattr(diet_module, "now_utc", lambda: now)
+
+    member = FamilyMember(
+        name="다이어터",
+        telegram_user_id=9101,
+        height_cm=170,
+        diet_active=True,
+        active=True,
+    )
+    db_session.add(member)
+    db_session.flush()
+
+    source_key = f"diet:nudge:{member.id}:2026-07-08"
+    db_session.add(
+        ScheduledNotification(
+            source_key=source_key,
+            scheduled_at=datetime(2026, 7, 8, 0, 0, tzinfo=UTC),  # 09:00 KST
+            target_telegram_id=9101,
+            message="이미 발송된 nudge",
+            status=NotificationStatus.sent,
+        )
+    )
+    db_session.flush()
+
+    rebuild_diet_reports(db_session, horizon_days=30, _today=today)
+    db_session.flush()
+
+    today_slot = (
+        db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.source_key == source_key)
+        .all()
+    )
+    assert len(today_slot) == 1, "당일 지난 nudge slot이 새 행으로 재삽입됨 (재발송 위험)"
+    assert today_slot[0].status == NotificationStatus.sent, "sent 이력이 pending으로 되살아남"
 
 
 def _bmi_report_dates(db_session, today: date, horizon_days: int = 40) -> set[date]:

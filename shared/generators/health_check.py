@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from shared.config import settings
 from shared.enums import NotificationStatus
-from shared.generators._time import scheduled_at_local, today_local
+from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import upsert_notification_by_key
 from shared.models import (
     FamilyMember,
@@ -71,6 +71,7 @@ def rebuild_health_checks(
     """
     today = _today or today_local()
     horizon = today + timedelta(days=horizon_days)
+    now = now_utc()
     group_chat_id = settings.group_chat_id
     report_items = _collect_report_items(session, today)
     desired_source_keys: set[str] = set()
@@ -80,15 +81,20 @@ def rebuild_health_checks(
         next_report_date = _first_of_next_month(report_date)
         month_items = [item for item in report_items if item.due_date < next_report_date]
         if month_items:
-            source_key = f"hc:monthly:group:{report_date.isoformat()}"
-            desired_source_keys.add(source_key)
-            upsert_notification_by_key(
-                session,
-                source_key,
-                scheduled_at_local(report_date),
-                group_chat_id,
-                _format_monthly_report(month_items, report_date),
-            )
+            scheduled_at = scheduled_at_local(report_date)
+            # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다. sent 행은 pending 한정
+            # 유니크 인덱스에 없어 upsert가 새 pending을 INSERT하므로, 당일 재시작 시
+            # 재발송을 막으려면 rule 생성기와 동일한 시각 가드가 필요하다 (audit #1).
+            if not (report_date == today and scheduled_at < now):
+                source_key = f"hc:monthly:group:{report_date.isoformat()}"
+                desired_source_keys.add(source_key)
+                upsert_notification_by_key(
+                    session,
+                    source_key,
+                    scheduled_at,
+                    group_chat_id,
+                    _format_monthly_report(month_items, report_date),
+                )
         report_date = next_report_date
 
     _cancel_stale_health_notifications(session, desired_source_keys)

@@ -7,9 +7,11 @@
 """
 
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
+import shared.generators.health_check as hc_module
 from shared.enums import NotificationStatus
 from shared.generators.health_check import _first_of_next_month, rebuild_health_checks
 from shared.models import (
@@ -250,6 +252,59 @@ def test_idempotent(member, check_type, db_session):
     second_count = len(_all_notifs(db_session))
 
     assert first_count == second_count, "2번 실행 시 중복 row 발생"
+
+
+# ---------------------------------------------------------------------------
+# 5b. 당일 이미 발송된 slot 재발송 금지 (audit #1)
+# ---------------------------------------------------------------------------
+
+
+def test_rebuild_does_not_resend_sent_slot_today(member, check_type, db_session, monkeypatch):
+    """당일 09시에 이미 발송된(sent) 월간 리포트를 오후 rebuild가 새 pending으로 재생성하지
+    않는다. sent 행은 pending 한정 유니크 인덱스에 없어 upsert가 재삽입하므로, 시각 가드가
+    없으면 재시작 배포마다 같은 리포트가 재발송된다 (audit #1)."""
+    today = date(2024, 6, 1)  # 1일 → 오늘이 월간 리포트 발송일
+    # now = 오늘 12:00 KST → 09:00 KST slot은 이미 과거
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
+    monkeypatch.setattr(hc_module, "now_utc", lambda: now)
+
+    source_key = "hc:monthly:group:2024-06-01"
+    db_session.add(
+        ScheduledNotification(
+            source_key=source_key,
+            scheduled_at=datetime(2024, 6, 1, 0, 0, tzinfo=UTC),  # 09:00 KST
+            target_telegram_id=GROUP_CHAT_ID,
+            message="이미 발송된 리포트",
+            status=NotificationStatus.sent,
+        )
+    )
+    db_session.flush()
+
+    rebuild_health_checks(db_session, horizon_days=HORIZON, _today=today)
+    db_session.flush()
+
+    today_slot = [n for n in _all_notifs(db_session) if n.source_key == source_key]
+    assert len(today_slot) == 1, "당일 지난 slot이 새 행으로 재삽입됨 (재발송 위험)"
+    assert today_slot[0].status == NotificationStatus.sent, "sent 이력이 pending으로 되살아남"
+
+
+def test_rebuild_keeps_future_slot_today(member, check_type, db_session, monkeypatch):
+    """오늘이 발송일이라도 발송 시각이 아직 안 지났으면 정상 생성한다 (audit #1 회귀).
+
+    시각 가드가 미래 slot까지 과잉 스킵하지 않음을 보장한다."""
+    today = date(2024, 6, 1)
+    # now = 오늘 06:00 KST → 09:00 KST slot은 아직 미래
+    now = datetime(2024, 6, 1, 6, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
+    monkeypatch.setattr(hc_module, "now_utc", lambda: now)
+
+    rebuild_health_checks(db_session, horizon_days=HORIZON, _today=today)
+    db_session.flush()
+
+    today_slot = [
+        n for n in _all_notifs(db_session) if n.source_key == "hc:monthly:group:2024-06-01"
+    ]
+    assert len(today_slot) == 1, "아직 안 지난 오늘 slot이 잘못 스킵됨"
+    assert today_slot[0].status == NotificationStatus.pending
 
 
 # ---------------------------------------------------------------------------

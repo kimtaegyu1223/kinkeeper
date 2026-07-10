@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shared.enums import NotificationStatus
-from shared.generators._time import scheduled_at_local, today_local
+from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import upsert_notification_by_key
 from shared.models import FamilyMember, ScheduledNotification, WeightLog
 
@@ -50,11 +50,12 @@ def rebuild_diet_reports(
         )
     ).all()
 
+    now = now_utc()
     desired_source_keys: set[str] = set()
     for member in members:
         if not member.telegram_user_id or not member.height_cm:
             continue
-        _schedule_member(session, member, today, horizon, desired_source_keys)
+        _schedule_member(session, member, today, horizon, now, desired_source_keys)
 
     # 이번 rebuild가 원하지 않는 diet:% pending을 취소한다. diet_active/active off,
     # height 제거 등으로 대상에서 빠진 구성원의 묵은 알림이 계속 발송되는 것을 막는다
@@ -79,6 +80,7 @@ def _schedule_member(
     member: FamilyMember,
     today: date,
     horizon: date,
+    now: datetime,
     desired_source_keys: set[str],
 ) -> None:
     assert member.telegram_user_id is not None
@@ -91,12 +93,16 @@ def _schedule_member(
         # 매주 월요일: 몸무게 입력 알림
         if monday >= today:
             scheduled_at = scheduled_at_local(monday)
-            source_key = f"diet:remind:{member.id}:{monday.isoformat()}"
-            desired_source_keys.add(source_key)
-            msg = "⚖️ 이번 주 몸무게를 입력해주세요!\n→ <code>/몸무게 XX.X</code>"
-            upsert_notification_by_key(
-                session, source_key, scheduled_at, member.telegram_user_id, msg
-            )
+            # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다. sent 행은 pending
+            # 한정 유니크 인덱스에 없어 upsert가 새 pending을 INSERT하므로, 당일 재시작
+            # 재발송을 막으려면 rule 생성기와 동일한 시각 가드가 필요하다 (audit #1).
+            if not (monday == today and scheduled_at < now):
+                source_key = f"diet:remind:{member.id}:{monday.isoformat()}"
+                desired_source_keys.add(source_key)
+                msg = "⚖️ 이번 주 몸무게를 입력해주세요!\n→ <code>/몸무게 XX.X</code>"
+                upsert_notification_by_key(
+                    session, source_key, scheduled_at, member.telegram_user_id, msg
+                )
 
         # 화~일: 매일 nudge (입력하면 bot handler에서 취소)
         for day_offset in range(1, 7):
@@ -104,6 +110,9 @@ def _schedule_member(
             if nudge_date < today or nudge_date > horizon:
                 continue
             scheduled_at = scheduled_at_local(nudge_date)
+            # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다 (audit #1).
+            if nudge_date == today and scheduled_at < now:
+                continue
             source_key = f"diet:nudge:{member.id}:{nudge_date.isoformat()}"
             desired_source_keys.add(source_key)
             msg = "⚖️ 아직 이번 주 몸무게를 입력하지 않았어요!\n→ <code>/몸무게 XX.X</code>"
