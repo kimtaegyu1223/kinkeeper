@@ -53,7 +53,6 @@ async def weight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.message is None or update.effective_user is None:
         return
 
-    # 인자 파싱
     args = context.args or []
     if not args:
         await update.message.reply_text("사용법: /몸무게 67.2")

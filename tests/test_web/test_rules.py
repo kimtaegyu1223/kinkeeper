@@ -1,6 +1,6 @@
 """웹 규칙 라우트 회귀 테스트 (audit #15, #60, #63).
 
-- #15: 규칙을 비활성으로 편집하면 기존 pending 알림이 취소돼야 한다.
+- #15: 규칙을 비활성으로 편집하면 기존 pending 알림이 삭제돼야 한다.
 - #60: 생일 규칙에서 대상 구성원 미선택(member_id=0)이면 거부돼야 한다.
 - #63: 규칙 저장과 알림 rebuild가 같은 트랜잭션이라 rebuild 실패 시 규칙도 롤백된다.
 
@@ -54,7 +54,7 @@ def client(db_engine, monkeypatch):
 
 
 def test_deactivating_rule_cancels_pending(client) -> None:
-    """활성 규칙을 비활성으로 편집하면 기존 pending 알림이 취소돼야 한다 (audit #15)."""
+    """활성 규칙을 비활성으로 편집하면 기존 pending 알림이 삭제돼야 한다 (audit #15)."""
     test_client, Session = client
     with Session() as s:
         rule = ReminderRule(

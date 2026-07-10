@@ -3,7 +3,7 @@
 diet_active=True인 구성원에게:
 - 매주 월요일 9시: 몸무게 입력 DM
 - 화~일: 그 주 기록 없으면 매일 DM (nudge)
-- 격주 월요일: BMI 리포트 DM
+- 격주 화요일: BMI 리포트 DM (월요일 기록을 반영하려 하루 늦춰 발송)
 """
 
 from datetime import UTC, date, datetime, timedelta

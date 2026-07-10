@@ -1,7 +1,7 @@
 """구성원 수명주기 회귀 테스트 (audit #16, #43, #44).
 
 - #44: 구성원 편집 시 생일 규칙의 커스텀 hour/lead_times가 보존돼야 한다.
-- #43: 생일 정보를 모두 지우면 생일 규칙이 비활성화되고 pending이 취소돼야 한다.
+- #43: 생일 정보를 모두 지우면 생일 규칙이 비활성화되고 pending이 삭제돼야 한다.
 - #16: 구성원 삭제 시 연결된 생일 규칙과 pending 알림이 함께 정리돼야 한다.
 
 라우트는 shared.db.get_session(전역 엔진)을 쓰므로 테스트 컨테이너 엔진으로
@@ -56,7 +56,7 @@ def test_ensure_birthday_rule_preserves_custom_settings(db_session) -> None:
 
 
 def test_ensure_birthday_rule_deactivates_and_cancels_pending_when_cleared(db_session) -> None:
-    """생일 정보를 모두 지우면 규칙이 비활성화되고 rebuild가 pending을 취소한다 (audit #43)."""
+    """생일 정보를 모두 지우면 규칙이 비활성화되고 rebuild가 pending을 삭제한다 (audit #43)."""
     member = FamilyMember(name="엄마", birthday_solar=date(1975, 3, 20))
     db_session.add(member)
     db_session.flush()
@@ -92,7 +92,7 @@ def test_ensure_birthday_rule_deactivates_and_cancels_pending_when_cleared(db_se
     assert result is rule
     assert result.active is False, "생일 삭제 후에도 규칙이 활성으로 남음(좀비 규칙)"
 
-    # update_member가 하는 후속 rebuild — 비활성 규칙이라 pending만 취소하고 반환
+    # update_member가 하는 후속 rebuild — 비활성 규칙이라 pending만 삭제하고 반환
     rebuild_for_rule(rule.id, db_session)
     db_session.flush()
 

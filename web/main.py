@@ -1,3 +1,9 @@
+"""관리자 웹 앱 진입점 — 라우터 등록·전역 미들웨어.
+
+FastAPI 앱을 만들고 라우터(구성원/규칙/건강검진/공지/다이어트)를 묶는다. CSRF 최소 방어·
+request_id 로깅·무결성 오류의 400 변환·시작 시 설정 검증·/healthz를 여기서 정의한다.
+"""
+
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager

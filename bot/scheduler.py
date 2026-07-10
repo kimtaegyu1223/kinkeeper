@@ -1,3 +1,9 @@
+"""봇 백그라운드 스케줄러 — 알림 발송·재생성 잡.
+
+APScheduler로 1분마다 dispatch_pending(발송 시각이 된 pending을 텔레그램 발송)을,
+매일 03시 rebuild(활성 규칙에서 예정 알림 재생성 + 보존기간 지난 종료 행 정리)를 돌린다.
+"""
+
 import asyncio
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast

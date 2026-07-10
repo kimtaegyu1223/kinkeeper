@@ -205,7 +205,7 @@ async def update_rule(rule_id: int, request: Request, active: str = Form("")) ->
         rule.config = config
         rule.active = is_active
         # is_active 여부와 무관하게 항상 재빌드해야 비활성 전환 시에도 기존
-        # pending 알림이 취소된다(내부에서 비활성이면 취소만 하고 반환) (audit #15).
+        # pending 알림이 삭제된다(내부에서 비활성이면 pending 삭제만 하고 반환) (audit #15).
         # 규칙 저장과 같은 트랜잭션에서 수행해 부분 커밋을 막는다 (audit #63).
         rebuild_for_rule(rule_id, session)
     return RedirectResponse("/rules", status_code=303)

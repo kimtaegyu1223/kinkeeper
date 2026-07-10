@@ -1,3 +1,10 @@
+"""알림 생성기 레지스트리·재빌드 진입점.
+
+규칙 type→생성기 매핑(_REGISTRY)을 두고, rebuild_upcoming(전체)·rebuild_for_rule(단건)로
+활성 규칙의 예정 알림을 재생성한다. 재생성 직전 기존 pending은 물리 삭제한다(cancelled
+누적 방지, audit #30). 건강검진·다이어트는 여기 없고 전용 리빌드 함수가 담당한다.
+"""
+
 from collections.abc import Callable
 
 import structlog
