@@ -24,7 +24,8 @@
 - [x] P4. 완료 (2026-07-10): 2커밋(57b7ae9 죽은코드, 57fcec0 주석) — 낡은 주석 5건 정정(취소→삭제, 격주 요일), 관문 모듈 독스트링 4건, 노이즈 제거. 148 passed.
 - [x] P5. 완료 (2026-07-10): 4커밋(b6aae48 README, 8c62da3 ARCHITECTURE 재작성, db3a7dd OPERATIONS 신설, web/README 현행화). 문서-코드 불일치 8건 정정(건강검진 알림 방식, 상태값 failed, 다이어트 플래그, 프로세스 3유닛 등). .env.example은 검증 결과 수정 불필요.
 - [x] P6. 완료 (2026-07-10): 1커밋(8945e0d) — alembic 체인·스키마 정합·downgrade 검증 추가(148→150). notifier/config는 P1 커버 확인으로 중복 작성 안 함.
-- [ ] P7. 최종 검증(전체 테스트/린트/타입) → main 머지 + 서비스 재시작 (사용자 확인 후)
+- [~] P7. 진행중 (2026-07-10): 최종 3렌즈 리뷰 → 확정 6건(4이슈) 전부 수정(5522f16, 74b7c90, 5455d03, e1a00a3 — source_key 재발송 가드, 마이그레이션 자가정리, members 트랜잭션 원자성, 배포 stop→migrate→start). 검증 155 passed/ruff/mypy 클린. 상세: docs/final-review-confirmed.json
+  - 남은 것: 사용자 결정 4건(다이어트/horizon/음력 스키마/healthz — 마이그레이션 배포 절차는 자가정리+배포순서 수정으로 해결됨) → 반영 → main 머지 + alembic upgrade + 서비스 재시작(최종 컨펌 필요)
 
 ## 워크플로 실행 기록
 
