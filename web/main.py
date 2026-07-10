@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.exc import IntegrityError
 
 from shared.db import check_db_connection
 from web.routes.broadcast import router as broadcast_router
@@ -21,6 +22,39 @@ app.include_router(rules_router)
 app.include_router(health_router)
 app.include_router(broadcast_router)
 app.include_router(diet_router)
+
+
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: Exception) -> Response:
+    """DB 무결성 제약 위반(중복 등록 등)을 500 대신 400으로 안내한다 (audit #46, #47).
+
+    예: telegram_user_id/검진 항목명 중복, 같은 검진 기록 중복 제출.
+    """
+    log.warning("무결성 제약 위반", method=request.method, path=request.url.path)
+    return HTMLResponse(
+        "이미 등록된 값이거나 중복된 데이터입니다. 입력값을 확인해주세요.",
+        status_code=400,
+    )
+
+
+@app.middleware("http")
+async def csrf_protect_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """상태 변경 요청의 크로스사이트 위조(CSRF)를 최소 방어한다 (audit #37).
+
+    브라우저가 붙이는 Sec-Fetch-Site 헤더가 cross-site/same-site면 거부하고
+    same-origin/none(주소창 직접 입력·북마크)만 허용한다. 헤더가 없는 요청
+    (구형 클라이언트·curl 등)은 그대로 통과시킨다.
+    """
+    if request.method not in _SAFE_METHODS:
+        site = request.headers.get("sec-fetch-site")
+        if site is not None and site not in ("same-origin", "none"):
+            return Response("교차 사이트 요청이 차단되었습니다.", status_code=403)
+    return await call_next(request)
 
 
 @app.middleware("http")

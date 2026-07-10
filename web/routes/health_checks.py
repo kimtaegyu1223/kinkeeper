@@ -1,14 +1,16 @@
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from shared.dates import replace_year
 from shared.db import get_session
 from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
 from web.auth import verify_admin
+from web.form_utils import parse_optional_int, parse_required_date
 
 router = APIRouter(prefix="/health", dependencies=[Depends(verify_admin)])
 templates = Jinja2Templates(directory="web/templates")
@@ -42,7 +44,7 @@ def create_type(
     min_age_str: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
-    min_age = int(min_age_str) if min_age_str.strip() else None
+    min_age = parse_optional_int(min_age_str, "최소 나이")
     with get_session() as session:
         session.add(
             HealthCheckType(
@@ -60,6 +62,9 @@ def create_type(
 def edit_type_form(type_id: int, request: Request) -> HTMLResponse:
     with get_session() as session:
         ct = session.get(HealthCheckType, type_id)
+        # 없는 id는 '추가' 폼을 렌더하지 않고 404 (audit #61).
+        if ct is None:
+            raise HTTPException(status_code=404, detail="검진 항목을 찾을 수 없습니다.")
     return templates.TemplateResponse(request, "health/type_form.html", {"ct": ct})
 
 
@@ -72,15 +77,17 @@ def update_type(
     min_age_str: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
-    min_age = int(min_age_str) if min_age_str.strip() else None
+    min_age = parse_optional_int(min_age_str, "최소 나이")
     with get_session() as session:
         ct = session.get(HealthCheckType, type_id)
-        if ct:
-            ct.name = name.strip()
-            ct.period_years = period_years
-            ct.gender = gender if gender in ("M", "F") else None
-            ct.min_age = min_age
-            ct.active = bool(active)
+        # 없는 id에 대한 조용한 no-op 대신 404로 알린다 (audit #61).
+        if ct is None:
+            raise HTTPException(status_code=404, detail="검진 항목을 찾을 수 없습니다.")
+        ct.name = name.strip()
+        ct.period_years = period_years
+        ct.gender = gender if gender in ("M", "F") else None
+        ct.min_age = min_age
+        ct.active = bool(active)
     return RedirectResponse("/health", status_code=303)
 
 
@@ -100,6 +107,9 @@ def delete_type(type_id: int) -> Response:
 def member_records(member_id: int, request: Request) -> HTMLResponse:
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
+        # 없는 구성원은 빈 페이지 대신 404 (audit #61).
+        if member is None:
+            raise HTTPException(status_code=404, detail="구성원을 찾을 수 없습니다.")
         check_types = session.scalars(
             select(HealthCheckType)
             .where(HealthCheckType.active.is_(True))
@@ -122,6 +132,22 @@ def member_records(member_id: int, request: Request) -> HTMLResponse:
         ).all()
         config_by_type: dict[int, MemberHealthCheckConfig] = {c.check_type_id: c for c in configs}
 
+        # 다음 예정일은 replace_year(2/29→평년 2/28 폴백)로 계산해 템플릿에 넘긴다.
+        # 템플릿의 checked_at.replace(year=...)는 2/29 기록이 비윤년으로 넘어갈 때
+        # ValueError→500이 났다 (audit #25).
+        next_due_by_type: dict[int, date] = {}
+        for ct in check_types:
+            rec = latest_by_type.get(ct.id)
+            if rec is None:
+                continue
+            cfg = config_by_type.get(ct.id)
+            effective_period = (
+                cfg.period_years if (cfg and cfg.period_years is not None) else ct.period_years
+            )
+            next_due_by_type[ct.id] = replace_year(
+                rec.checked_at, rec.checked_at.year + effective_period
+            )
+
     return templates.TemplateResponse(
         request,
         "health/records.html",
@@ -129,6 +155,7 @@ def member_records(member_id: int, request: Request) -> HTMLResponse:
             "member": member,
             "check_types": check_types,
             "latest_by_type": latest_by_type,
+            "next_due_by_type": next_due_by_type,
             "all_records": records,
             "config_by_type": config_by_type,
             "today": datetime.now(UTC).date(),
@@ -148,7 +175,7 @@ def add_record(
             HealthCheckRecord(
                 member_id=member_id,
                 check_type_id=check_type_id,
-                checked_at=date.fromisoformat(checked_at),
+                checked_at=parse_required_date(checked_at, "검진일"),
                 note=note.strip() or None,
             )
         )
@@ -169,7 +196,7 @@ def upsert_member_config(
                 MemberHealthCheckConfig.check_type_id == check_type_id,
             )
         )
-        period: int | None = int(period_years) if period_years.strip() else None
+        period: int | None = parse_optional_int(period_years, "주기(년)")
         is_active = bool(active)
         if config is None:
             session.add(

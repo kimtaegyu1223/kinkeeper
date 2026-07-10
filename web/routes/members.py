@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from shared.enums import ReminderType
 from shared.models import FamilyMember, ReminderRule
 from shared.scheduler_utils import rebuild_for_rule
 from web.auth import verify_admin
+from web.form_utils import parse_int_default, parse_optional_date, parse_optional_int
 
 router = APIRouter(prefix="/members", dependencies=[Depends(verify_admin)])
 templates = Jinja2Templates(directory="web/templates")
@@ -19,11 +20,24 @@ _DEFAULT_BIRTHDAY_HOUR = 9
 
 
 def _parse_lunar(month: str, day: str) -> date | None:
-    m = int(month) if month.strip() else 0
-    d = int(day) if day.strip() else 0
-    if m and d:
+    # 음력 월/일은 폼 select 값이지만 curl 등으로 비정상 값이 올 수 있어 안전 파싱한다.
+    m = parse_int_default(month, "음력 월", 0)
+    d = parse_int_default(day, "음력 일", 0)
+    if not (m and d):
+        return None
+    # 음력은 월 1~12, 일 1~30이 유효하다.
+    if not (1 <= m <= 12 and 1 <= d <= 30):
+        raise HTTPException(status_code=400, detail="음력 생일의 월/일이 올바르지 않습니다.")
+    try:
+        # 연도(2000)는 자리표시자로만 쓰이고 생일 알림은 월/일만 참조한다.
         return date(2000, m, d)
-    return None
+    except ValueError:
+        # 음력 2월 30일은 실재하나 date(2000,2,30)로 표현할 수 없다. 500 대신 안내한다.
+        # (윤달·2/30 무손실 저장은 컬럼 구조 변경이 필요해 별도 단계로 미룬다 — audit #45)
+        raise HTTPException(
+            status_code=400,
+            detail="음력 2월 30일 생일은 현재 저장 방식으로는 등록할 수 없습니다.",
+        ) from None
 
 
 def _parse_gender(gender: str) -> str | None:
@@ -107,12 +121,12 @@ def create_member(
     with get_session() as session:
         member = FamilyMember(
             name=name.strip(),
-            telegram_user_id=int(telegram_user_id) if telegram_user_id.strip() else None,
-            birthday_solar=date.fromisoformat(birthday_solar) if birthday_solar else None,
+            telegram_user_id=parse_optional_int(telegram_user_id, "텔레그램 사용자 ID"),
+            birthday_solar=parse_optional_date(birthday_solar, "양력 생일"),
             birthday_lunar=_parse_lunar(birthday_lunar_month, birthday_lunar_day),
             gender=_parse_gender(gender),
             active=bool(active),
-            height_cm=int(height_cm) if height_cm.strip() else None,
+            height_cm=parse_optional_int(height_cm, "키"),
             diet_active=bool(diet_active),
         )
         session.add(member)
@@ -132,6 +146,9 @@ def create_member(
 def edit_member_form(member_id: int, request: Request) -> HTMLResponse:
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
+        # 없는 id는 '추가' 폼을 렌더하지 않고 404 (audit #61).
+        if member is None:
+            raise HTTPException(status_code=404, detail="구성원을 찾을 수 없습니다.")
     return templates.TemplateResponse(request, "members/form.html", {"member": member})
 
 
@@ -151,19 +168,21 @@ def update_member(
     rule_id: int | None = None
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
-        if member:
-            member.name = name.strip()
-            member.telegram_user_id = int(telegram_user_id) if telegram_user_id.strip() else None
-            member.birthday_solar = date.fromisoformat(birthday_solar) if birthday_solar else None
-            member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
-            member.gender = _parse_gender(gender)
-            member.active = bool(active)
-            member.height_cm = int(height_cm) if height_cm.strip() else None
-            member.diet_active = bool(diet_active)
-            rule = _ensure_birthday_rule(session, member)
-            if rule:
-                session.flush()
-                rule_id = rule.id
+        # 없는 id에 대한 조용한 no-op 대신 404로 알린다 (audit #61).
+        if member is None:
+            raise HTTPException(status_code=404, detail="구성원을 찾을 수 없습니다.")
+        member.name = name.strip()
+        member.telegram_user_id = parse_optional_int(telegram_user_id, "텔레그램 사용자 ID")
+        member.birthday_solar = parse_optional_date(birthday_solar, "양력 생일")
+        member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
+        member.gender = _parse_gender(gender)
+        member.active = bool(active)
+        member.height_cm = parse_optional_int(height_cm, "키")
+        member.diet_active = bool(diet_active)
+        rule = _ensure_birthday_rule(session, member)
+        if rule:
+            session.flush()
+            rule_id = rule.id
 
     if rule_id:
         rebuild_for_rule(rule_id)

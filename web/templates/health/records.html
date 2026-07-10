@@ -30,8 +30,8 @@
         {% set cfg = config_by_type.get(ct.id) %}
         {% set effective_period = cfg.period_years if (cfg and cfg.period_years is not none) else ct.period_years %}
         {% if rec %}
-          {% set next_year = rec.checked_at.year + effective_period %}
-          {% set next_due = rec.checked_at.replace(year=next_year) %}
+          {# 다음 예정일은 라우트에서 계산(2/29→평년 2/28 폴백). 템플릿 replace(year)는 500 유발 (audit #25) #}
+          {% set next_due = next_due_by_type.get(ct.id) %}
           {% set days_left = (next_due - today).days %}
         {% endif %}
       <tr {% if cfg and not cfg.active %}style="opacity:0.5"{% endif %}>
