@@ -59,6 +59,7 @@ def _build_config_and_leads(  # noqa: PLR0912
             config["repeat"] = "yearly"
             config["month"] = int(form.get("custom_month") or 1)
             config["day"] = int(form.get("custom_day") or 1)
+            config["use_lunar"] = form.get("custom_use_lunar") == "1"
             leads = _parse_int_list(form.get("custom_lead_times") or "0")
         else:
             config["run_at"] = form.get("custom_run_at") or ""

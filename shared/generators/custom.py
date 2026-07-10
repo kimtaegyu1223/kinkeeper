@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from shared.config import settings
 from shared.generators.base import get_target_telegram_ids, upsert_notification
+from shared.lunar import lunar_to_solar
 from shared.models import ReminderRule
 
 
@@ -17,6 +18,20 @@ def _scheduled_at_local(day: date, hour: int) -> datetime:
     return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
         UTC
     )
+
+
+def _resolve_event_date(use_lunar: bool, year: int, month: int, day: int) -> date | None:
+    """음력이면 해당 연도 양력으로 변환, 양력이면 그대로 사용. 잘못된 날짜는 None."""
+    if use_lunar:
+        result = lunar_to_solar(year, month, day)
+        if not result:
+            return None
+        y, m, d = result
+        return date(y, m, d)
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
 
 
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
@@ -68,13 +83,13 @@ def _generate_yearly(
 ) -> None:
     month = int(str(config.get("month") or 1))
     day = int(str(config.get("day") or 1))
+    use_lunar = bool(config.get("use_lunar", False))
     today = _today_local()
     horizon = today + timedelta(days=horizon_days)
 
     for year in (today.year, today.year + 1):
-        try:
-            event_date = date(year, month, day)
-        except ValueError:
+        event_date = _resolve_event_date(use_lunar, year, month, day)
+        if event_date is None:
             continue
 
         if event_date < today or event_date > horizon:
