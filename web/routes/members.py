@@ -7,8 +7,8 @@ from sqlalchemy import select
 
 from shared.db import get_session
 from shared.enums import ReminderType
+from shared.generators import rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
-from shared.scheduler_utils import rebuild_for_rule
 from web.auth import verify_admin
 from web.form_utils import parse_int_default, parse_optional_date, parse_optional_int
 
@@ -118,7 +118,6 @@ def create_member(
     height_cm: str = Form(""),
     diet_active: str = Form(""),
 ) -> RedirectResponse:
-    rule_id: int | None = None
     with get_session() as session:
         member = FamilyMember(
             name=name.strip(),
@@ -135,10 +134,9 @@ def create_member(
         rule = _ensure_birthday_rule(session, member)
         if rule:
             session.flush()
-            rule_id = rule.id
-
-    if rule_id:
-        rebuild_for_rule(rule_id)
+            # 구성원/규칙 저장과 알림 재빌드를 같은 트랜잭션에서 수행해 부분 커밋을
+            # 막는다(rules.py와 동일, audit #63).
+            rebuild_for_rule(rule.id, session)
 
     return RedirectResponse("/members", status_code=303)
 
@@ -166,7 +164,6 @@ def update_member(
     height_cm: str = Form(""),
     diet_active: str = Form(""),
 ) -> RedirectResponse:
-    rule_id: int | None = None
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
         # 없는 id에 대한 조용한 no-op 대신 404로 알린다 (audit #61).
@@ -183,10 +180,9 @@ def update_member(
         rule = _ensure_birthday_rule(session, member)
         if rule:
             session.flush()
-            rule_id = rule.id
-
-    if rule_id:
-        rebuild_for_rule(rule_id)
+            # 구성원/규칙 저장과 알림 재빌드를 같은 트랜잭션에서 수행해 부분 커밋을
+            # 막는다(rules.py와 동일, audit #63).
+            rebuild_for_rule(rule.id, session)
 
     return RedirectResponse("/members", status_code=303)
 
