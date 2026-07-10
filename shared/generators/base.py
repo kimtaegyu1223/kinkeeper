@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -83,7 +83,3 @@ def get_target_telegram_ids(session: Session, rule: ReminderRule) -> list[int]:
     from shared.config import settings
 
     return [settings.group_chat_id]
-
-
-def now_utc() -> datetime:
-    return datetime.now(UTC)

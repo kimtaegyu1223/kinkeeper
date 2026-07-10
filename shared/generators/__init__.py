@@ -3,6 +3,7 @@ from collections.abc import Callable
 import structlog
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.enums import NotificationStatus, ReminderType
 from shared.generators import birthday, custom, holiday
 from shared.models import ReminderRule, ScheduledNotification
@@ -18,7 +19,7 @@ _REGISTRY: dict[ReminderType, GeneratorFn] = {
 }
 
 
-def rebuild_upcoming(session: Session, horizon_days: int = 60) -> None:
+def rebuild_upcoming(session: Session, horizon_days: int = settings.schedule_horizon_days) -> None:
     """모든 활성 규칙에 대해 horizon_days 이내 예정 알림을 생성/보충."""
     from sqlalchemy import select
 
@@ -36,7 +37,9 @@ def rebuild_upcoming(session: Session, horizon_days: int = 60) -> None:
             log.exception("규칙 알림 생성 실패", rule_id=rule.id, rule_type=rule.type)
 
 
-def rebuild_for_rule(rule_id: int, session: Session, horizon_days: int = 60) -> None:
+def rebuild_for_rule(
+    rule_id: int, session: Session, horizon_days: int = settings.schedule_horizon_days
+) -> None:
     """규칙 수정/추가 시 해당 규칙만 즉시 재생성."""
     _delete_pending_for_rule(session, rule_id)
     rule = session.get(ReminderRule, rule_id)

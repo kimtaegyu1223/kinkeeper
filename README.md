@@ -56,13 +56,15 @@
 ## 스택
 
 - **Python 3.12** + uv
-- **python-telegram-bot v21** (polling)
+- **python-telegram-bot v22** (polling)
 - **FastAPI** + Jinja2 + HTMX (관리자 웹)
 - **PostgreSQL 16** (Docker)
 - **SQLAlchemy 2.0** + Alembic
 - **APScheduler** (봇 프로세스 내장)
 - **systemd** (서비스 관리)
 - structlog, ruff, mypy, pytest + testcontainers
+
+> KinKeeper는 systemd `--user` 유닛으로 동작하며 `systemctl --user`로 관리합니다.
 
 ---
 
@@ -170,13 +172,13 @@ bash deploy/deploy.sh
 
 ```bash
 # 봇 로그 실시간
-journalctl -u kinkeeper-bot -f
+journalctl --user -u kinkeeper-bot -f
 
 # 웹 로그 실시간
-journalctl -u kinkeeper-web -f
+journalctl --user -u kinkeeper-web -f
 
 # 에러만 필터링
-journalctl -u kinkeeper-bot -p err --since "1 hour ago"
+journalctl --user -u kinkeeper-bot -p err --since "1 hour ago"
 ```
 
 ---

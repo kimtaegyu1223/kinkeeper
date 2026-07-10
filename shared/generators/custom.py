@@ -49,14 +49,13 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     if repeat == "yearly":
         _generate_yearly(rule, session, horizon_days, config, hour, msg, target_ids)
     else:
-        _generate_once(rule, session, config, hour, msg, target_ids)
+        _generate_once(rule, session, config, msg, target_ids)
 
 
 def _generate_once(
     rule: ReminderRule,
     session: Session,
     config: dict[str, object],
-    hour: int,
     msg: str,
     target_ids: list[int],
 ) -> None:

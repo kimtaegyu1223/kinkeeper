@@ -91,7 +91,8 @@ class ScheduledNotification(Base):
     """규칙에서 파생된 실제 발송 예정 큐."""
 
     __tablename__ = "scheduled_notifications"
-    # 동시 rebuild(웹 워커 2 + 봇)로 같은 slot이 중복 insert되는 것을 DB 레벨에서 막는다.
+    # 새벽 재빌드·관리자 웹 편집·봇 발송이 겹칠 때 같은 slot이 중복 insert되는 것을
+    # DB 레벨에서 막는다.
     # pending 행만 유니크하게 강제해 sent/cancelled 이력은 여러 건 남을 수 있도록 한다 (audit #29).
     __table_args__ = (
         Index(
