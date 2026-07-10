@@ -9,7 +9,7 @@ from shared.models import ReminderRule, ScheduledNotification
 
 
 def test_holiday_lunar_generates(db_session, monkeypatch) -> None:
-    monkeypatch.setattr(holiday_module, "_today_local", lambda: date(2026, 9, 1))
+    monkeypatch.setattr(holiday_module, "today_local", lambda: date(2026, 9, 1))
     rule = ReminderRule(
         type=ReminderType.holiday,
         title="추석",
@@ -33,7 +33,7 @@ def test_holiday_lunar_generates(db_session, monkeypatch) -> None:
 
 def test_holiday_lunar_year_carryover(db_session, monkeypatch) -> None:
     """음력 12월 명절이 이듬해 양력 1월에 걸릴 때 연초 재생성에서 누락되면 안 된다 (audit #3)."""
-    monkeypatch.setattr(holiday_module, "_today_local", lambda: date(2027, 1, 1))
+    monkeypatch.setattr(holiday_module, "today_local", lambda: date(2027, 1, 1))
     rule = ReminderRule(
         type=ReminderType.holiday,
         title="섣달 기일",
@@ -60,7 +60,7 @@ def test_holiday_lunar_year_carryover(db_session, monkeypatch) -> None:
 
 def test_holiday_escapes_name_with_html_chars(db_session, monkeypatch) -> None:
     """명절 이름에 '<' 등이 있어도 escape되어야 발송 실패를 막는다 (audit #12)."""
-    monkeypatch.setattr(holiday_module, "_today_local", lambda: date(2026, 9, 1))
+    monkeypatch.setattr(holiday_module, "today_local", lambda: date(2026, 9, 1))
     rule = ReminderRule(
         type=ReminderType.holiday,
         title="설날",

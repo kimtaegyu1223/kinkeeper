@@ -8,13 +8,12 @@ diet_active=True인 구성원에게:
 
 from datetime import UTC, date, datetime, timedelta
 from html import escape
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from shared.config import settings
 from shared.enums import NotificationStatus
+from shared.generators._time import scheduled_at_local, today_local
 from shared.generators.base import upsert_notification_by_key
 from shared.models import FamilyMember, ScheduledNotification, WeightLog
 
@@ -25,16 +24,6 @@ _BIWEEKLY_EPOCH = date(1970, 1, 5)
 
 def _monday_of_week(d: date) -> date:
     return d - timedelta(days=d.weekday())
-
-
-def _today_local() -> date:
-    return datetime.now(ZoneInfo(settings.tz)).date()
-
-
-def _scheduled_at_local(day: date, hour: int = 9) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
-        UTC
-    )
 
 
 def _bmi(weight_kg: float, height_cm: int) -> float:
@@ -50,7 +39,7 @@ def _normal_weight_range(height_cm: int) -> tuple[float, float]:
 def rebuild_diet_reports(
     session: Session, horizon_days: int = 60, _today: date | None = None
 ) -> None:
-    today = _today or _today_local()
+    today = _today or today_local()
     horizon = today + timedelta(days=horizon_days)
 
     members = session.scalars(
@@ -101,7 +90,7 @@ def _schedule_member(
     while monday <= horizon:
         # 매주 월요일: 몸무게 입력 알림
         if monday >= today:
-            scheduled_at = _scheduled_at_local(monday)
+            scheduled_at = scheduled_at_local(monday)
             source_key = f"diet:remind:{member.id}:{monday.isoformat()}"
             desired_source_keys.add(source_key)
             msg = "⚖️ 이번 주 몸무게를 입력해주세요!\n→ <code>/몸무게 XX.X</code>"
@@ -114,7 +103,7 @@ def _schedule_member(
             nudge_date = monday + timedelta(days=day_offset)
             if nudge_date < today or nudge_date > horizon:
                 continue
-            scheduled_at = _scheduled_at_local(nudge_date)
+            scheduled_at = scheduled_at_local(nudge_date)
             source_key = f"diet:nudge:{member.id}:{nudge_date.isoformat()}"
             desired_source_keys.add(source_key)
             msg = "⚖️ 아직 이번 주 몸무게를 입력하지 않았어요!\n→ <code>/몸무게 XX.X</code>"
@@ -128,7 +117,7 @@ def _schedule_member(
         if absolute_week % 2 == 0 and monday >= today:
             report_date = monday + timedelta(days=1)  # 화요일에 발송 (월요일 기록 반영)
             if report_date <= horizon:
-                scheduled_at = _scheduled_at_local(report_date)
+                scheduled_at = scheduled_at_local(report_date)
                 source_key = f"diet:bmi:{member.id}:{report_date.isoformat()}"
                 desired_source_keys.add(source_key)
                 # 메시지는 실제 발송 시점에 동적으로 생성해야 하므로 placeholder

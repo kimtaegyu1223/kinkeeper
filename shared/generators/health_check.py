@@ -7,15 +7,15 @@ rebuild_health_checks() 를 scheduler에서 rebuild_upcoming() 과 함께 호출
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from html import escape
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shared.config import settings
 from shared.enums import NotificationStatus
+from shared.generators._time import scheduled_at_local, today_local
 from shared.generators.base import upsert_notification_by_key
 from shared.models import (
     FamilyMember,
@@ -48,16 +48,6 @@ def _next_due(latest_checked: date | None, period_years: int, today: date) -> da
     if latest_checked is None:
         return today  # 기록 없음 → 지금 당장 검진 필요
     return _add_years(latest_checked, period_years)
-
-
-def _today_local() -> date:
-    return datetime.now(ZoneInfo(settings.tz)).date()
-
-
-def _scheduled_at_local(day: date, hour: int = 9) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
-        UTC
-    )
 
 
 def _upsert_health_notification(
@@ -101,7 +91,7 @@ def rebuild_health_checks(
 
     _today: 테스트용 날짜 주입 (None이면 오늘 사용)
     """
-    today = _today or _today_local()
+    today = _today or today_local()
     horizon = today + timedelta(days=horizon_days)
     group_chat_id = settings.group_chat_id
     report_items = _collect_report_items(session, today)
@@ -117,7 +107,7 @@ def rebuild_health_checks(
             _upsert_health_notification(
                 session,
                 source_key,
-                _scheduled_at_local(report_date),
+                scheduled_at_local(report_date),
                 group_chat_id,
                 _format_monthly_report(month_items, report_date),
             )

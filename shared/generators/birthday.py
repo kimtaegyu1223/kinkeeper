@@ -1,11 +1,10 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from html import escape
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from shared.config import settings
 from shared.dates import replace_year
+from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import get_target_telegram_ids, upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import FamilyMember, ReminderRule
@@ -30,20 +29,6 @@ def _resolve_birthday_solar(member: FamilyMember, use_lunar: bool, year: int) ->
     return member.birthday_solar
 
 
-def _today_local() -> date:
-    return datetime.now(ZoneInfo(settings.tz)).date()
-
-
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
-def _scheduled_at_local(day: date, hour: int) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
-        UTC
-    )
-
-
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
     member_id = rule.config.get("member_id")
     if not member_id:
@@ -59,9 +44,9 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     use_lunar = bool(rule.config.get("use_lunar", False))
     hour = int(rule.config.get("hour", 9))
 
-    today = _today_local()
+    today = today_local()
     horizon = today + timedelta(days=horizon_days)
-    now = _now_utc()
+    now = now_utc()
 
     # 작년/올해/내년 세 해 모두 시도.
     # (음력은 매년 양력 날짜가 달라지고, 음력 11~12월 생일은 이듬해 양력 1~2월에
@@ -85,7 +70,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             notify_date = bday_solar - timedelta(days=lead)
             if notify_date < today:
                 continue
-            scheduled_at = _scheduled_at_local(notify_date, hour)
+            scheduled_at = scheduled_at_local(notify_date, hour)
             # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다 (audit #1).
             if notify_date == today and scheduled_at < now:
                 continue

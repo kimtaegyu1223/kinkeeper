@@ -5,23 +5,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import get_target_telegram_ids, upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import ReminderRule
-
-
-def _today_local() -> date:
-    return datetime.now(ZoneInfo(settings.tz)).date()
-
-
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
-def _scheduled_at_local(day: date, hour: int) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
-        UTC
-    )
 
 
 def _resolve_event_date(use_lunar: bool, year: int, month: int, day: int) -> date | None:
@@ -91,9 +78,9 @@ def _generate_yearly(
     month = int(str(config.get("month") or 1))
     day = int(str(config.get("day") or 1))
     use_lunar = bool(config.get("use_lunar", False))
-    today = _today_local()
+    today = today_local()
     horizon = today + timedelta(days=horizon_days)
-    now = _now_utc()
+    now = now_utc()
 
     # 음력 11~12월 기일은 이듬해 양력 1~2월에 떨어지므로 today.year-1도 시도한다.
     for year in (today.year - 1, today.year, today.year + 1):
@@ -108,7 +95,7 @@ def _generate_yearly(
             notify_date = event_date - timedelta(days=lead)
             if notify_date < today:
                 continue
-            scheduled_at = _scheduled_at_local(notify_date, hour)
+            scheduled_at = scheduled_at_local(notify_date, hour)
             # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다 (audit #1).
             if notify_date == today and scheduled_at < now:
                 continue

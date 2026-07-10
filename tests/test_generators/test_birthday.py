@@ -15,7 +15,7 @@ FIXED_TODAY = date(2026, 6, 15)
 
 @pytest.fixture(autouse=True)
 def _fixed_today(monkeypatch):
-    monkeypatch.setattr(birthday_module, "_today_local", lambda: FIXED_TODAY)
+    monkeypatch.setattr(birthday_module, "today_local", lambda: FIXED_TODAY)
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def test_birthday_idempotent(rule, member, db_session) -> None:
 
 def test_birthday_feb29_does_not_crash_on_common_year(db_session, monkeypatch) -> None:
     """양력 2/29 생일: 평년 재생성 시 ValueError 없이 2/28로 폴백해야 한다 (audit #5)."""
-    monkeypatch.setattr(birthday_module, "_today_local", lambda: date(2026, 2, 1))
+    monkeypatch.setattr(birthday_module, "today_local", lambda: date(2026, 2, 1))
     member = FamilyMember(
         name="윤일",
         telegram_user_id=42,
@@ -120,10 +120,10 @@ def test_birthday_feb29_does_not_crash_on_common_year(db_session, monkeypatch) -
 def test_birthday_skips_past_slot_today(db_session, monkeypatch) -> None:
     """오늘 생일(lead 0)이라도 발송 시각이 이미 지났으면 재생성하지 않는다 (audit #1)."""
     today = date(2026, 6, 15)
-    monkeypatch.setattr(birthday_module, "_today_local", lambda: today)
+    monkeypatch.setattr(birthday_module, "today_local", lambda: today)
     # now = 오늘 12:00 KST → 09:00 KST slot은 이미 과거
     now = datetime(2026, 6, 15, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
-    monkeypatch.setattr(birthday_module, "_now_utc", lambda: now)
+    monkeypatch.setattr(birthday_module, "now_utc", lambda: now)
 
     member = FamilyMember(
         name="오늘생일",
@@ -157,10 +157,10 @@ def test_birthday_skips_past_slot_today(db_session, monkeypatch) -> None:
 def test_birthday_keeps_future_slot_today(db_session, monkeypatch) -> None:
     """오늘 생일이고 발송 시각이 아직 안 지났으면 생성한다 (audit #1 회귀)."""
     today = date(2026, 6, 15)
-    monkeypatch.setattr(birthday_module, "_today_local", lambda: today)
+    monkeypatch.setattr(birthday_module, "today_local", lambda: today)
     # now = 오늘 06:00 KST → 09:00 KST slot은 아직 미래
     now = datetime(2026, 6, 15, 6, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
-    monkeypatch.setattr(birthday_module, "_now_utc", lambda: now)
+    monkeypatch.setattr(birthday_module, "now_utc", lambda: now)
 
     member = FamilyMember(
         name="오늘생일",
@@ -193,7 +193,7 @@ def test_birthday_keeps_future_slot_today(db_session, monkeypatch) -> None:
 
 def test_birthday_lunar_year_carryover(db_session, monkeypatch) -> None:
     """음력 12월 생일이 이듬해 양력 1월에 걸릴 때, 연초 재생성에서 누락되면 안 된다 (audit #2)."""
-    monkeypatch.setattr(birthday_module, "_today_local", lambda: date(2027, 1, 1))
+    monkeypatch.setattr(birthday_module, "today_local", lambda: date(2027, 1, 1))
     member = FamilyMember(
         name="음력12월",
         telegram_user_id=77,

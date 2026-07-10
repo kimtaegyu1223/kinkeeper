@@ -44,7 +44,7 @@ def test_yearly_custom_includes_lead_days_and_uses_local_hour(db_session):
 
 def test_yearly_custom_lunar_converts_to_solar(db_session, monkeypatch):
     """음력 기일: 저장된 월/일을 그대로 양력으로 쓰지 않고 음력→양력으로 변환해야 한다."""
-    monkeypatch.setattr(custom, "_today_local", lambda: date(2026, 1, 1))
+    monkeypatch.setattr(custom, "today_local", lambda: date(2026, 1, 1))
     rule = ReminderRule(
         type=ReminderType.custom,
         title="아빠 기일",
@@ -78,7 +78,7 @@ def test_yearly_custom_lunar_converts_to_solar(db_session, monkeypatch):
 
 def test_yearly_custom_lunar_year_carryover(db_session, monkeypatch):
     """음력 12월 기일이 이듬해 양력 1월에 걸릴 때 연초 재생성에서 누락되면 안 된다 (audit #4)."""
-    monkeypatch.setattr(custom, "_today_local", lambda: date(2027, 1, 1))
+    monkeypatch.setattr(custom, "today_local", lambda: date(2027, 1, 1))
     rule = ReminderRule(
         type=ReminderType.custom,
         title="섣달 기일",
