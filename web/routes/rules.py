@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from shared.db import get_session
 from shared.enums import ReminderType
+from shared.generators import rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
-from shared.scheduler_utils import rebuild_for_rule
 from web.auth import verify_admin
 
 router = APIRouter(prefix="/rules", dependencies=[Depends(verify_admin)])
@@ -68,6 +68,17 @@ def _build_config_and_leads(  # noqa: PLR0912
     return config, leads
 
 
+def _validate_rule_target(rule_type: str, config: dict[str, object]) -> None:
+    """생일 규칙은 대상 구성원(member_id)이 필수다.
+
+    폼 '대상 구성원' select은 required가 아니라 미선택 시 member_id=0으로 저장되는데,
+    birthday.generate가 member_id falsy면 조기 반환해 알림이 영원히 생성되지 않는
+    좀비 규칙이 된다. 저장 단계에서 거부한다 (audit #60).
+    """
+    if rule_type == "birthday" and not config.get("member_id"):
+        raise HTTPException(status_code=400, detail="대상 구성원을 선택해주세요.")
+
+
 def _get_members() -> list[FamilyMember]:
     with get_session() as session:
         return list(
@@ -102,8 +113,8 @@ async def create_rule(request: Request, active: str = Form("")) -> RedirectRespo
     rule_type = str(form.get("type") or "")
     title = str(form.get("title") or "").strip()
     config, leads = _build_config_and_leads(rule_type, {k: str(v) for k, v in form.items()})
+    _validate_rule_target(rule_type, config)
 
-    rule_id: int | None = None
     is_active = bool(active)
     with get_session() as session:
         rule = ReminderRule(
@@ -115,9 +126,9 @@ async def create_rule(request: Request, active: str = Form("")) -> RedirectRespo
         )
         session.add(rule)
         session.flush()
-        rule_id = rule.id
-    if is_active and rule_id:
-        rebuild_for_rule(rule_id)
+        # 규칙 저장과 알림 재빌드를 같은 트랜잭션에서 수행해 부분 커밋을 막는다 (audit #63).
+        if is_active:
+            rebuild_for_rule(rule.id, session)
     return RedirectResponse("/rules", status_code=303)
 
 
@@ -137,6 +148,7 @@ async def update_rule(rule_id: int, request: Request, active: str = Form("")) ->
     rule_type = str(form.get("type") or "")
     title = str(form.get("title") or "").strip()
     config, leads = _build_config_and_leads(rule_type, {k: str(v) for k, v in form.items()})
+    _validate_rule_target(rule_type, config)
 
     is_active = bool(active)
     with get_session() as session:
@@ -147,8 +159,10 @@ async def update_rule(rule_id: int, request: Request, active: str = Form("")) ->
             rule.lead_times_days = leads
             rule.config = config
             rule.active = is_active
-    if is_active:
-        rebuild_for_rule(rule_id)
+            # is_active 여부와 무관하게 항상 재빌드해야 비활성 전환 시에도 기존
+            # pending 알림이 취소된다(내부에서 비활성이면 취소만 하고 반환) (audit #15).
+            # 규칙 저장과 같은 트랜잭션에서 수행해 부분 커밋을 막는다 (audit #63).
+            rebuild_for_rule(rule_id, session)
     return RedirectResponse("/rules", status_code=303)
 
 

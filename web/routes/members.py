@@ -35,8 +35,6 @@ def _ensure_birthday_rule(session: object, member: FamilyMember) -> ReminderRule
 
     if not isinstance(session, SASession):
         return None
-    if not member.birthday_solar and not member.birthday_lunar:
-        return None
 
     existing = session.scalar(
         select(ReminderRule).where(
@@ -45,19 +43,31 @@ def _ensure_birthday_rule(session: object, member: FamilyMember) -> ReminderRule
         )
     )
 
+    # 생일 정보가 모두 비면 기존 생일 규칙을 비활성화한다. 반환된 규칙을 caller가
+    # rebuild_for_rule에 넘기면 내부에서 pending 알림까지 취소된다 (audit #43).
+    if not member.birthday_solar and not member.birthday_lunar:
+        if existing and existing.active:
+            existing.active = False
+        return existing
+
     use_lunar = bool(member.birthday_lunar and not member.birthday_solar)
-    config: dict[str, object] = {
-        "member_id": member.id,
-        "use_lunar": use_lunar,
-        "hour": _DEFAULT_BIRTHDAY_HOUR,
-    }
 
     if existing:
+        # 관리자가 /rules에서 커스텀한 hour/lead_times_days는 보존하고, 구성원 필드에서
+        # 파생되는 member_id/use_lunar만 갱신한다 (audit #44).
+        # (JSONB 변경 감지를 위해 새 dict로 재할당)
+        config = dict(existing.config or {})
+        config["member_id"] = member.id
+        config["use_lunar"] = use_lunar
         existing.config = config
-        existing.lead_times_days = _DEFAULT_BIRTHDAY_LEADS
         existing.active = True
         return existing
     else:
+        config = {
+            "member_id": member.id,
+            "use_lunar": use_lunar,
+            "hour": _DEFAULT_BIRTHDAY_HOUR,
+        }
         rule = ReminderRule(
             type=ReminderType.birthday,
             title=f"{member.name} 생일 알림",
@@ -166,5 +176,16 @@ def delete_member(member_id: int) -> Response:
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
         if member:
+            # 생일 규칙은 config.member_id JSONB로만 참조돼 FK 캐스케이드가 닿지 않는다.
+            # 구성원 삭제 시 연결된 생일 규칙을 함께 삭제하면 rule_id FK(ondelete CASCADE)로
+            # 그 규칙의 pending 알림까지 정리된다 (audit #16).
+            rules = session.scalars(
+                select(ReminderRule).where(
+                    ReminderRule.type == ReminderType.birthday,
+                    ReminderRule.config["member_id"].as_integer() == member_id,
+                )
+            ).all()
+            for rule in rules:
+                session.delete(rule)
             session.delete(member)
     return Response(status_code=200)
