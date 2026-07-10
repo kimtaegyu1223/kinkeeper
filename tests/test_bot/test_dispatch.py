@@ -175,3 +175,74 @@ def test_purge_old_notifications(scheduler_db) -> None:
         assert s.get(ScheduledNotification, old_sent) is None
         assert s.get(ScheduledNotification, old_pending) is not None  # pending은 보존
         assert s.get(ScheduledNotification, recent_cancelled) is not None  # 90일 이내 보존
+
+
+# ---------------------------------------------------------------------------
+# #35 resolve 실패한 BMI placeholder는 원문 발송 대신 취소
+# ---------------------------------------------------------------------------
+
+
+async def test_dispatch_cancels_unresolvable_bmi(scheduler_db, monkeypatch) -> None:
+    """resolve 실패 시 placeholder 원문이 발송되면 안 된다 (audit #35)."""
+    now = datetime.now(UTC)
+    nid = _add(
+        scheduler_db,
+        scheduled_at=now - timedelta(minutes=1),
+        message="__bmi_report__:999",
+        source_key="diet:bmi:999:2026-01-01",
+    )
+
+    sent: list[str] = []
+
+    async def fake_send(chat_id, message):
+        sent.append(message)
+        return True
+
+    # diet: 알림은 feature-off 시 먼저 취소되므로, BMI resolve 경로를 타도록 기능을 켠다.
+    monkeypatch.setattr(sched.settings, "weight_feature_enabled", True)
+    monkeypatch.setattr(sched, "send_message", fake_send)
+    monkeypatch.setattr(sched, "_resolve_bmi_message", lambda member_id: None)
+
+    await sched.dispatch_pending()
+
+    assert sent == [], "resolve 실패한 placeholder 원문이 발송됨"
+    assert _status(scheduler_db, nid) == NotificationStatus.cancelled
+
+
+async def test_dispatch_sends_resolved_bmi(scheduler_db, monkeypatch) -> None:
+    """resolve 성공 시 실시간 생성된 메시지가 발송돼야 한다 (audit #35)."""
+    now = datetime.now(UTC)
+    nid = _add(
+        scheduler_db,
+        scheduled_at=now - timedelta(minutes=1),
+        message="__bmi_report__:5",
+        source_key="diet:bmi:5:2026-01-01",
+    )
+
+    sent: list[str] = []
+
+    async def fake_send(chat_id, message):
+        sent.append(message)
+        return True
+
+    monkeypatch.setattr(sched.settings, "weight_feature_enabled", True)
+    monkeypatch.setattr(sched, "send_message", fake_send)
+    monkeypatch.setattr(sched, "_resolve_bmi_message", lambda member_id: "📊 BMI 리포트")
+
+    await sched.dispatch_pending()
+
+    assert sent == ["📊 BMI 리포트"]
+    assert _status(scheduler_db, nid) == NotificationStatus.sent
+
+
+# ---------------------------------------------------------------------------
+# #34 스케줄러 misfire_grace_time 설정
+# ---------------------------------------------------------------------------
+
+
+def test_create_scheduler_sets_misfire_grace_time() -> None:
+    """잡이 잠깐 늦어도 스킵되지 않도록 grace time이 설정돼야 한다 (audit #34)."""
+    scheduler = sched.create_scheduler()
+
+    assert scheduler._job_defaults["misfire_grace_time"] == 3600
+    assert scheduler._job_defaults["coalesce"] is True

@@ -189,16 +189,28 @@ async def dispatch_pending() -> None:
                         await asyncio.to_thread(_mark_cancelled, notification_id)
                         continue
 
-            # BMI 리포트: 실시간으로 메시지 생성
+            # BMI 리포트: 발송 직전 실시간 생성. 멤버 삭제/키 미등록 등으로 resolve에
+            # 실패하면 placeholder 원문('__bmi_report__:{id}')이 그대로 나가지 않도록
+            # 취소하고 스킵한다 (audit #35).
             if message.startswith("__bmi_report__:"):
                 try:
                     member_id = int(message.split(":")[1])
                 except (IndexError, ValueError):
                     member_id = None
-                if member_id is not None:
-                    resolved = await asyncio.to_thread(_resolve_bmi_message, member_id)
-                    if resolved:
-                        message = resolved
+                resolved = (
+                    await asyncio.to_thread(_resolve_bmi_message, member_id)
+                    if member_id is not None
+                    else None
+                )
+                if not resolved:
+                    log.warning(
+                        "BMI 리포트 생성 실패 — 발송 취소",
+                        notification_id=notification_id,
+                        source_key=source_key,
+                    )
+                    await asyncio.to_thread(_mark_cancelled, notification_id)
+                    continue
+                message = resolved
 
             success = await send_message(chat_id, message)
             await asyncio.to_thread(
@@ -218,7 +230,16 @@ async def rebuild_upcoming_async() -> None:
 
 
 def create_scheduler() -> AsyncIOScheduler:
-    scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(dispatch_pending, "interval", minutes=1, id="dispatch_pending")
+    # 기본 misfire_grace_time은 1초라, 잡 실행이 1초만 늦어도 그 회차가 스킵된다.
+    # 하루 1회뿐인 03시 rebuild가 이렇게 스킵되면 그날 재생성이 통째로 누락되므로
+    # grace time을 넉넉히 준다 (audit #34).
+    scheduler = AsyncIOScheduler(
+        timezone="Asia/Seoul",
+        job_defaults={"misfire_grace_time": 3600, "coalesce": True},
+    )
+    # dispatch는 1분 주기라 다음 tick에 회복되므로 grace를 주기 이내로 둔다.
+    scheduler.add_job(
+        dispatch_pending, "interval", minutes=1, id="dispatch_pending", misfire_grace_time=59
+    )
     scheduler.add_job(rebuild_upcoming_async, "cron", hour=3, minute=0, id="rebuild_upcoming")
     return scheduler

@@ -1,0 +1,154 @@
+"""bot/main 라우팅·시작 견고성 회귀 테스트 (audit #55, #76, #36)."""
+
+from types import SimpleNamespace
+
+import pytest
+
+import bot.main as botmain
+
+
+class _FakeMessage:
+    def __init__(self, text: str, chat_id: int = 1, chat_type: str = "private") -> None:
+        self.text = text
+        self.chat_id = chat_id
+        self.chat = SimpleNamespace(type=chat_type)
+        self.replies: list[str] = []
+
+    async def reply_text(self, text: str, parse_mode: str | None = None) -> None:
+        self.replies.append(text)
+
+
+class _FakeUpdate:
+    def __init__(self, text: str) -> None:
+        self.message = _FakeMessage(text)
+        self.effective_user = SimpleNamespace(id=123)
+
+
+class _FakeContext:
+    def __init__(self) -> None:
+        self.args: list[str] | None = None
+
+
+@pytest.fixture
+def record_handlers(monkeypatch):
+    """라우팅 대상 핸들러를 호출 기록용으로 대체."""
+    called: list[str] = []
+
+    def make(name):
+        async def handler(update, context):
+            called.append(name)
+
+        return handler
+
+    for name in (
+        "weight_command",
+        "upcoming_command",
+        "birthday_command",
+        "health_status_command",
+        "health_done_command",
+    ):
+        monkeypatch.setattr(botmain, name, make(name))
+    monkeypatch.setattr(botmain.settings, "weight_feature_enabled", True)
+    return called
+
+
+# ---------------------------------------------------------------------------
+# #55 접두 오탐 방지 — 첫 토큰 정확 일치만 명령으로 처리
+# ---------------------------------------------------------------------------
+
+
+async def test_router_ignores_prefix_false_positive(record_handlers) -> None:
+    """'/다음일정표 볼래'는 /다음일정으로 오인되면 안 된다 (audit #55)."""
+    await botmain._handle_korean_command(_FakeUpdate("/다음일정표 볼래"), _FakeContext())
+    assert record_handlers == []
+
+
+async def test_router_exact_match_routes_and_parses_args(record_handlers) -> None:
+    ctx = _FakeContext()
+    await botmain._handle_korean_command(_FakeUpdate("/다음일정 30"), ctx)
+    assert record_handlers == ["upcoming_command"]
+    assert ctx.args == ["30"]
+
+
+async def test_router_leading_space_still_matches(record_handlers) -> None:
+    """선행 공백이 있어도 명령이 조용히 무시되면 안 된다 (audit #55)."""
+    await botmain._handle_korean_command(_FakeUpdate("   /다음일정"), _FakeContext())
+    assert record_handlers == ["upcoming_command"]
+
+
+async def test_router_weight_prefix_false_positive(record_handlers) -> None:
+    await botmain._handle_korean_command(_FakeUpdate("/몸무게측정 어떻게 해"), _FakeContext())
+    assert record_handlers == []
+
+
+# ---------------------------------------------------------------------------
+# #76 메시지 원문 로깅 제거 — 매칭된 명령명·메타데이터만 로깅
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def capture_log(monkeypatch):
+    records: list[dict] = []
+
+    class _FakeLog:
+        def info(self, event, **kw):
+            records.append({"event": event, **kw})
+
+        def warning(self, *a, **k):
+            pass
+
+        def exception(self, *a, **k):
+            pass
+
+    monkeypatch.setattr(botmain, "log", _FakeLog())
+    return records
+
+
+async def test_router_does_not_log_non_command_content(capture_log, record_handlers) -> None:
+    """명령이 아닌 사적 대화 텍스트는 로깅되지 않아야 한다 (audit #76)."""
+    update = _FakeUpdate("우리 이번주 병원 예약 바꿔야 해")
+    await botmain._handle_korean_command(update, _FakeContext())
+    assert capture_log == []
+
+
+async def test_router_logs_only_command_metadata(capture_log, record_handlers) -> None:
+    """명령 매칭 시에도 원문 text 대신 명령명만 로깅해야 한다 (audit #76)."""
+    await botmain._handle_korean_command(_FakeUpdate("/다음일정 7"), _FakeContext())
+    assert capture_log
+    for rec in capture_log:
+        assert "text" not in rec
+    assert capture_log[-1]["command"] == "/다음일정"
+
+
+# ---------------------------------------------------------------------------
+# #36 시작 시 rebuild 실패가 프로세스를 죽이지 않음
+# ---------------------------------------------------------------------------
+
+
+async def test_startup_rebuild_retries_then_gives_up(monkeypatch) -> None:
+    calls = {"n": 0}
+
+    async def always_fail():
+        calls["n"] += 1
+        raise RuntimeError("DB 미기동")
+
+    async def fast_sleep(_):
+        return None
+
+    monkeypatch.setattr(botmain, "rebuild_upcoming_async", always_fail)
+    monkeypatch.setattr(botmain.asyncio, "sleep", fast_sleep)
+
+    # 끝내 실패해도 예외를 전파하지 않아야 한다.
+    await botmain._startup_rebuild(max_attempts=3)
+    assert calls["n"] == 3
+
+
+async def test_startup_rebuild_succeeds_first_try(monkeypatch) -> None:
+    calls = {"n": 0}
+
+    async def ok():
+        calls["n"] += 1
+
+    monkeypatch.setattr(botmain, "rebuild_upcoming_async", ok)
+    await botmain._startup_rebuild(max_attempts=3)
+    assert calls["n"] == 1

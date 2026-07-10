@@ -1,6 +1,12 @@
 from datetime import date
 
-from bot.handlers.query import _next_birthday_solar, _parse_days_arg, _preview_message
+from bot.handlers.query import (
+    _chunk_lines,
+    _next_birthday_solar,
+    _parse_days_arg,
+    _preview_message,
+    _utf16_len,
+)
 from shared.config import settings
 from shared.models import FamilyMember
 
@@ -58,6 +64,24 @@ def test_next_birthday_solar_lunar_year_carryover():
 def test_next_birthday_solar_none_when_unregistered():
     member = FamilyMember(name="미등록")
     assert _next_birthday_solar(member, date(2026, 6, 15)) is None
+
+
+def test_chunk_lines_splits_over_telegram_limit():
+    """4096자를 넘는 목록은 줄 단위로 나뉘고 각 조각은 한도 이내여야 한다 (audit #48)."""
+    lines = ["• 06/15 09:00 - " + ("건강검진 " * 10) for _ in range(200)]
+
+    chunks = _chunk_lines(lines, limit=1000)
+
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert _utf16_len(chunk) <= 1000
+    # 모든 줄이 보존되어야 한다.
+    assert sum(c.count("• 06/15") for c in chunks) == 200
+
+
+def test_chunk_lines_single_chunk_when_short():
+    lines = ["헤더", "• 항목1", "• 항목2"]
+    assert _chunk_lines(lines) == ["헤더\n• 항목1\n• 항목2"]
 
 
 class _FakeMessage:
@@ -126,3 +150,81 @@ async def test_birthday_command_escapes_name(db_engine, monkeypatch) -> None:
     finally:
         with _get_session() as s:
             s.query(FamilyMember).filter(FamilyMember.telegram_user_id == 778899).delete()
+
+
+async def test_upcoming_command_rejects_non_member(db_engine, monkeypatch) -> None:
+    """등록되지 않은 사용자는 /다음일정으로 알림 큐를 열람할 수 없어야 한다 (audit #9)."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from sqlalchemy.orm import sessionmaker
+
+    import bot.handlers.query as query
+    from bot.handlers.query import upcoming_command
+
+    Session = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    @contextmanager
+    def _get_session():
+        s = Session()
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
+    monkeypatch.setattr(query, "get_session", _get_session)
+
+    # 등록된 구성원이 없는 텔레그램 ID로 호출.
+    update = _FakeUpdate(424242)
+    await upcoming_command(update, SimpleNamespace(args=[]))  # type: ignore[arg-type]
+
+    assert update.message.replies
+    text, _ = update.message.replies[-1]
+    assert "등록된 가족 구성원을 찾을 수 없습니다" in text
+
+
+async def test_upcoming_command_allows_active_member(db_engine, monkeypatch) -> None:
+    """등록된 활성 구성원은 정상적으로 /다음일정을 조회할 수 있어야 한다 (audit #9)."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from sqlalchemy.orm import sessionmaker
+
+    import bot.handlers.query as query
+    from bot.handlers.query import upcoming_command
+
+    Session = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    @contextmanager
+    def _get_session():
+        s = Session()
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
+    monkeypatch.setattr(query, "get_session", _get_session)
+
+    with _get_session() as s:
+        s.add(FamilyMember(name="회원", telegram_user_id=515151, active=True))
+
+    try:
+        update = _FakeUpdate(515151)
+        await upcoming_command(update, SimpleNamespace(args=[]))  # type: ignore[arg-type]
+
+        assert update.message.replies
+        text, _ = update.message.replies[-1]
+        # 권한은 통과했으므로 거부 메시지가 아니어야 한다 (예정 알림 없음 응답).
+        assert "등록된 가족 구성원을 찾을 수 없습니다" not in text
+        assert "예정된 알림이 없습니다" in text
+    finally:
+        with _get_session() as s:
+            s.query(FamilyMember).filter(FamilyMember.telegram_user_id == 515151).delete()

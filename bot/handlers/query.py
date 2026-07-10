@@ -64,8 +64,45 @@ def _get_member_by_telegram_id(telegram_user_id: int) -> FamilyMember | None:
         )
 
 
+# 텔레그램 sendMessage 본문 한도 (UTF-16 코드 유닛 기준).
+_TELEGRAM_MAX_LEN = 4096
+
+
+def _utf16_len(text: str) -> int:
+    """텔레그램 한도 계산과 동일하게 UTF-16 코드 유닛 수를 센다."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _chunk_lines(lines: Sequence[str], limit: int = _TELEGRAM_MAX_LEN) -> list[str]:
+    """줄 목록을 한도 이내 문자열들로 나눈다 (줄 경계 유지, audit #48)."""
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for line in lines:
+        # 줄 사이 개행 1개 포함
+        add = _utf16_len(line) + (1 if current else 0)
+        if current and current_len + add > limit:
+            chunks.append("\n".join(current))
+            current = [line]
+            current_len = _utf16_len(line)
+        else:
+            current.append(line)
+            current_len += add
+    if current:
+        chunks.append("\n".join(current))
+    return chunks
+
+
 async def upcoming_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
+    if update.message is None or update.effective_user is None:
+        return
+
+    # 등록된 활성 구성원만 예정 알림 큐를 조회할 수 있다 (권한 검증, audit #9).
+    member = await asyncio.to_thread(_get_member_by_telegram_id, update.effective_user.id)
+    if member is None:
+        await update.message.reply_text(
+            "등록된 가족 구성원을 찾을 수 없습니다.\n관리자에게 텔레그램 ID 등록을 요청하세요."
+        )
         return
 
     days = _parse_days_arg(context.args)
@@ -82,7 +119,9 @@ async def upcoming_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         preview = escape(_preview_message(row.message))
         lines.append(f"• {local_time.strftime('%m/%d %H:%M')} - {preview}")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    # 목록이 4096자를 넘으면 BadRequest로 무응답이 되므로 줄 단위로 나눠 발송한다 (audit #48).
+    for chunk in _chunk_lines(lines):
+        await update.message.reply_text(chunk, parse_mode="HTML")
 
 
 async def birthday_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
