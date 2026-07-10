@@ -3,8 +3,9 @@ from html import escape
 
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.generators._time import now_utc, scheduled_at_local, today_local
-from shared.generators.base import get_target_telegram_ids, upsert_notification
+from shared.generators.base import upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import ReminderRule
 
@@ -34,8 +35,6 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
         if holiday_date > horizon or holiday_date < today:
             continue
 
-        target_ids = get_target_telegram_ids(session, rule)
-
         for lead in rule.lead_times_days:
             notify_date = holiday_date - timedelta(days=lead)
             if notify_date < today:
@@ -56,5 +55,4 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
                     f"🚆 <b>{holiday_name}</b>이 {lead}일 후입니다. "
                     f"({holiday_date.strftime('%m/%d')}) 교통편 예매를 서두르세요!"
                 )
-            for tid in target_ids:
-                upsert_notification(session, rule, scheduled_at, tid, msg)
+            upsert_notification(session, rule, scheduled_at, settings.group_chat_id, msg)

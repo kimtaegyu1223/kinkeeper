@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from shared.config import settings
 from shared.generators._time import now_utc, scheduled_at_local, today_local
-from shared.generators.base import get_target_telegram_ids, upsert_notification
+from shared.generators.base import upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import ReminderRule
 
@@ -31,12 +31,10 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     msg = config.get("message") or rule.title
     hour = int(config.get("hour", 9))
 
-    target_ids = get_target_telegram_ids(session, rule)
-
     if repeat == "yearly":
-        _generate_yearly(rule, session, horizon_days, config, hour, msg, target_ids)
+        _generate_yearly(rule, session, horizon_days, config, hour, msg)
     else:
-        _generate_once(rule, session, config, msg, target_ids)
+        _generate_once(rule, session, config, msg)
 
 
 def _generate_once(
@@ -44,7 +42,6 @@ def _generate_once(
     session: Session,
     config: dict[str, object],
     msg: str,
-    target_ids: list[int],
 ) -> None:
     run_at_str = str(config.get("run_at") or "")
     if not run_at_str:
@@ -62,8 +59,7 @@ def _generate_once(
 
     # 메시지는 자유 입력이므로 escape (yearly 경로는 _format_yearly_message에서 이미 escape)
     escaped_msg = escape(msg)
-    for tid in target_ids:
-        upsert_notification(session, rule, run_at, tid, escaped_msg)
+    upsert_notification(session, rule, run_at, settings.group_chat_id, escaped_msg)
 
 
 def _generate_yearly(
@@ -73,7 +69,6 @@ def _generate_yearly(
     config: dict[str, object],
     hour: int,
     msg: str,
-    target_ids: list[int],
 ) -> None:
     month = int(str(config.get("month") or 1))
     day = int(str(config.get("day") or 1))
@@ -100,8 +95,7 @@ def _generate_yearly(
             if notify_date == today and scheduled_at < now:
                 continue
             message = _format_yearly_message(msg, lead, event_date)
-            for tid in target_ids:
-                upsert_notification(session, rule, scheduled_at, tid, message)
+            upsert_notification(session, rule, scheduled_at, settings.group_chat_id, message)
 
 
 def _format_yearly_message(msg: str, lead: int, event_date: date) -> str:

@@ -3,9 +3,10 @@ from html import escape
 
 from sqlalchemy.orm import Session
 
+from shared.config import settings
 from shared.dates import replace_year
 from shared.generators._time import now_utc, scheduled_at_local, today_local
-from shared.generators.base import get_target_telegram_ids, upsert_notification
+from shared.generators.base import upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import FamilyMember, ReminderRule
 
@@ -62,7 +63,6 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
         if bday_solar < today or bday_solar > horizon:
             continue
 
-        target_ids = get_target_telegram_ids(session, rule)
         # 이름은 임의 입력이므로 HTML 특수문자를 escape (parse_mode=HTML 발송)
         name = escape(member.name)
 
@@ -82,5 +82,4 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
                     f"🎂 <b>{name}</b>님의 생일({bday_label})이 <b>{lead}일 후</b>입니다!"
                     f" ({bday_solar.strftime('%m/%d')})"
                 )
-            for tid in target_ids:
-                upsert_notification(session, rule, scheduled_at, tid, msg)
+            upsert_notification(session, rule, scheduled_at, settings.group_chat_id, msg)

@@ -76,10 +76,3 @@ def upsert_notification_by_key(
             message=message,
         )
     )
-
-
-def get_target_telegram_ids(session: Session, rule: ReminderRule) -> list[int]:
-    """그룹채널 ID만 반환 (모든 알림은 그룹에 발송)."""
-    from shared.config import settings
-
-    return [settings.group_chat_id]
