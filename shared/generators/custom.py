@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime, timedelta
 from html import escape
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.config_schemas import CustomConfig
 from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import upsert_notification
 from shared.lunar import lunar_to_solar
@@ -26,7 +28,7 @@ def _resolve_event_date(use_lunar: bool, year: int, month: int, day: int) -> dat
 
 
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
-    config = rule.config
+    config = cast(CustomConfig, rule.config)
     repeat = config.get("repeat")
     msg = config.get("message") or rule.title
     hour = int(config.get("hour", 9))
@@ -40,7 +42,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
 def _generate_once(
     rule: ReminderRule,
     session: Session,
-    config: dict[str, object],
+    config: CustomConfig,
     msg: str,
 ) -> None:
     run_at_str = str(config.get("run_at") or "")
@@ -66,7 +68,7 @@ def _generate_yearly(
     rule: ReminderRule,
     session: Session,
     horizon_days: int,
-    config: dict[str, object],
+    config: CustomConfig,
     hour: int,
     msg: str,
 ) -> None:

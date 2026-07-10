@@ -69,6 +69,8 @@ class ReminderRule(Base):
     type: Mapped[ReminderType] = mapped_column(nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     lead_times_days: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, nullable=False)
+    # config JSONB의 형태는 type마다 다르다. 스키마는 shared/config_schemas.py의
+    # BirthdayConfig/HolidayConfig/CustomConfig TypedDict에 문서화돼 있다 (audit #25).
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

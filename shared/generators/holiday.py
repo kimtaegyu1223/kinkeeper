@@ -1,9 +1,11 @@
 from datetime import date, timedelta
 from html import escape
+from typing import cast
 
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.config_schemas import HolidayConfig
 from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import upsert_notification
 from shared.lunar import lunar_to_solar
@@ -11,11 +13,12 @@ from shared.models import ReminderRule
 
 
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
-    lunar_month = rule.config.get("lunar_month")
-    lunar_day = rule.config.get("lunar_day")
+    config = cast(HolidayConfig, rule.config)
+    lunar_month = config.get("lunar_month")
+    lunar_day = config.get("lunar_day")
     # 명절 이름은 관리자 자유 입력이므로 HTML 특수문자를 escape (parse_mode=HTML 발송)
-    holiday_name = escape(rule.config.get("name", "명절"))
-    hour = int(rule.config.get("hour", 9))
+    holiday_name = escape(config.get("name", "명절"))
+    hour = int(config.get("hour", 9))
 
     if not lunar_month or not lunar_day:
         return

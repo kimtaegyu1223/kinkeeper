@@ -1,9 +1,11 @@
 from datetime import date, timedelta
 from html import escape
+from typing import cast
 
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.config_schemas import BirthdayConfig
 from shared.dates import replace_year
 from shared.generators._time import now_utc, scheduled_at_local, today_local
 from shared.generators.base import upsert_notification
@@ -31,7 +33,8 @@ def _resolve_birthday_solar(member: FamilyMember, use_lunar: bool, year: int) ->
 
 
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
-    member_id = rule.config.get("member_id")
+    config = cast(BirthdayConfig, rule.config)
+    member_id = config.get("member_id")
     if not member_id:
         return
 
@@ -42,8 +45,8 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     if not member or not member.active:
         return
 
-    use_lunar = bool(rule.config.get("use_lunar", False))
-    hour = int(rule.config.get("hour", 9))
+    use_lunar = bool(config.get("use_lunar", False))
+    hour = int(config.get("hour", 9))
 
     today = today_local()
     horizon = today + timedelta(days=horizon_days)

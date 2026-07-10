@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
+from shared.config_schemas import BirthdayConfig, CustomConfig, HolidayConfig
 from shared.db import get_session
 from shared.enums import ReminderType
 from shared.generators import _REGISTRY, rebuild_for_rule
@@ -37,47 +38,54 @@ def _build_config_and_leads(
     rule_type: str,
     form: dict[str, str],
 ) -> tuple[dict[str, object], list[int]]:
-    """폼 데이터 → (config dict, lead_times_days)."""
-    config: dict[str, object] = {}
-    leads: list[int] = []
+    """폼 데이터 → (config dict, lead_times_days).
 
+    config는 type별 TypedDict(shared/config_schemas.py)로 구성해 키 오타를 mypy가 잡게 한다.
+    저장은 JSONB(dict[str, Any])이므로 dict()로 평범한 dict로 되돌려 반환한다.
+    """
     if rule_type == "birthday":
-        config["member_id"] = parse_int_default(form.get("birthday_member_id"), "대상 구성원", 0)
-        config["use_lunar"] = form.get("birthday_use_lunar") == "1"
-        config["hour"] = _hour(form, "birthday_hour")
-        leads = _parse_int_list(form.get("birthday_lead_times") or "14,7,3,1,0")
+        birthday_cfg: BirthdayConfig = {
+            "member_id": parse_int_default(form.get("birthday_member_id"), "대상 구성원", 0),
+            "use_lunar": form.get("birthday_use_lunar") == "1",
+            "hour": _hour(form, "birthday_hour"),
+        }
+        return dict(birthday_cfg), _parse_int_list(form.get("birthday_lead_times") or "14,7,3,1,0")
 
-    elif rule_type == "holiday":
-        config["name"] = form.get("holiday_name") or ""
-        config["lunar_month"] = require_range(
-            parse_int_default(form.get("holiday_lunar_month"), "음력 월", 1), "음력 월", 1, 12
-        )
-        config["lunar_day"] = require_range(
-            parse_int_default(form.get("holiday_lunar_day"), "음력 일", 1), "음력 일", 1, 30
-        )
-        config["hour"] = _hour(form, "holiday_hour")
-        leads = _parse_int_list(form.get("holiday_lead_times") or "30,7,2,0")
+    if rule_type == "holiday":
+        holiday_cfg: HolidayConfig = {
+            "name": form.get("holiday_name") or "",
+            "lunar_month": require_range(
+                parse_int_default(form.get("holiday_lunar_month"), "음력 월", 1), "음력 월", 1, 12
+            ),
+            "lunar_day": require_range(
+                parse_int_default(form.get("holiday_lunar_day"), "음력 일", 1), "음력 일", 1, 30
+            ),
+            "hour": _hour(form, "holiday_hour"),
+        }
+        return dict(holiday_cfg), _parse_int_list(form.get("holiday_lead_times") or "30,7,2,0")
 
-    elif rule_type == "custom":
-        repeat = form.get("custom_repeat") or "once"
-        config["hour"] = _hour(form, "custom_hour")
-        config["message"] = form.get("custom_message") or ""
-        if repeat == "yearly":
-            config["repeat"] = "yearly"
-            config["month"] = require_range(
+    if rule_type == "custom":
+        custom_cfg: CustomConfig = {
+            "hour": _hour(form, "custom_hour"),
+            "message": form.get("custom_message") or "",
+        }
+        if (form.get("custom_repeat") or "once") == "yearly":
+            custom_cfg["repeat"] = "yearly"
+            custom_cfg["month"] = require_range(
                 parse_int_default(form.get("custom_month"), "월", 1), "월", 1, 12
             )
-            config["day"] = require_range(
+            custom_cfg["day"] = require_range(
                 parse_int_default(form.get("custom_day"), "일", 1), "일", 1, 31
             )
-            config["use_lunar"] = form.get("custom_use_lunar") == "1"
+            custom_cfg["use_lunar"] = form.get("custom_use_lunar") == "1"
             leads = _parse_int_list(form.get("custom_lead_times") or "0")
         else:
             # run_at은 문자열로 저장하되 ISO 형식만 허용(생성기가 fromisoformat) (audit #18).
-            config["run_at"] = validate_iso_datetime(form.get("custom_run_at"), "예약 일시")
+            custom_cfg["run_at"] = validate_iso_datetime(form.get("custom_run_at"), "예약 일시")
             leads = [0]
+        return dict(custom_cfg), leads
 
-    return config, leads
+    return {}, []
 
 
 def _parse_rule_type(rule_type: str) -> ReminderType:
