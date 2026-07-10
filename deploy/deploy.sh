@@ -16,10 +16,9 @@ echo "==> DB 마이그레이션"
 ~/.local/bin/uv run alembic upgrade head
 
 echo "==> 서비스 재시작"
-sudo systemctl restart kinkeeper-bot kinkeeper-web
+systemctl --user restart kinkeeper-bot kinkeeper-web kinkeeper-web-tailscale
 
 echo "==> 상태 확인"
-sudo systemctl status kinkeeper-bot --no-pager
-sudo systemctl status kinkeeper-web --no-pager
+systemctl --user status kinkeeper-bot kinkeeper-web kinkeeper-web-tailscale --no-pager
 
 echo "==> 배포 완료"
