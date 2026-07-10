@@ -6,6 +6,7 @@
 
 import asyncio
 from datetime import UTC, date, datetime
+from html import escape
 
 import structlog
 from sqlalchemy import select
@@ -41,12 +42,15 @@ def _get_health_status(member_id: int) -> str:
             select(HealthCheckType).where(HealthCheckType.active.is_(True))
         ).all()
 
-        lines = [f"📋 <b>{member.name}</b>님 건강검진 현황\n"]
+        # 이름/항목명은 관리자 자유 입력이므로 escape (parse_mode=HTML 회신)
+        lines = [f"📋 <b>{escape(member.name)}</b>님 건강검진 현황\n"]
 
         for ct in check_types:
             # 성별 필터
             if ct.gender and member.gender != ct.gender:
                 continue
+
+            ct_name = escape(ct.name)
 
             latest = session.scalar(
                 select(HealthCheckRecord)
@@ -59,7 +63,7 @@ def _get_health_status(member_id: int) -> str:
             )
 
             if latest is None:
-                lines.append(f"❓ <b>{ct.name}</b> — 기록 없음")
+                lines.append(f"❓ <b>{ct_name}</b> — 기록 없음")
                 continue
 
             try:
@@ -74,13 +78,13 @@ def _get_health_status(member_id: int) -> str:
             next_str = next_due.strftime("%Y-%m-%d")
 
             if days_left < 0:
-                status = f"⚠️ <b>{ct.name}</b>"
+                status = f"⚠️ <b>{ct_name}</b>"
                 lines.append(
                     f"{status} — 마지막: {last_str} | 다음: {next_str} "
                     f"(<b>{abs(days_left)}일 초과!</b>)"
                 )
             elif days_left <= 30:
-                status = f"🔜 <b>{ct.name}</b>"
+                status = f"🔜 <b>{ct_name}</b>"
                 lines.append(
                     f"{status} — 마지막: {last_str} | 다음: {next_str} (<b>{days_left}일 후</b>)"
                 )
@@ -94,7 +98,7 @@ def _get_health_status(member_id: int) -> str:
                     period_str += f"{months_left}개월 "
                 period_str = period_str.strip() + " 후"
                 lines.append(
-                    f"✅ <b>{ct.name}</b> — 마지막: {last_str} | 다음: {next_str} ({period_str})"
+                    f"✅ <b>{ct_name}</b> — 마지막: {last_str} | 다음: {next_str} ({period_str})"
                 )
 
         if len(lines) == 1:
@@ -114,12 +118,13 @@ def _record_check(member_id: int, check_name: str, checked_at: date) -> str:
             ).all()
             names = [t.name for t in all_types]
             suggestions = [n for n in names if check_name in n or n in check_name]
+            # 항목명·사용자 입력은 escape (parse_mode=HTML 회신)
             hint = (
-                "\n혹시 이 중 하나인가요?\n" + "\n".join(f"• {n}" for n in suggestions)
+                "\n혹시 이 중 하나인가요?\n" + "\n".join(f"• {escape(n)}" for n in suggestions)
                 if suggestions
-                else f"\n등록된 검진 항목: {', '.join(names)}"
+                else f"\n등록된 검진 항목: {', '.join(escape(n) for n in names)}"
             )
-            return f"'{check_name}' 검진 항목을 찾을 수 없습니다.{hint}"
+            return f"'{escape(check_name)}' 검진 항목을 찾을 수 없습니다.{hint}"
 
         # 이미 같은 날 기록 있으면 무시
         existing = session.scalar(
@@ -131,7 +136,8 @@ def _record_check(member_id: int, check_name: str, checked_at: date) -> str:
         )
         if existing:
             return (
-                f"✅ {ct.name} 검진이 이미 {checked_at.strftime('%Y-%m-%d')}로 기록되어 있습니다."
+                f"✅ {escape(ct.name)} 검진이 이미 "
+                f"{checked_at.strftime('%Y-%m-%d')}로 기록되어 있습니다."
             )
 
         session.add(
@@ -144,7 +150,7 @@ def _record_check(member_id: int, check_name: str, checked_at: date) -> str:
         log.info(
             "검진 기록 저장", member_id=member_id, check_type=ct.name, checked_at=str(checked_at)
         )
-        return f"✅ <b>{ct.name}</b> 검진 기록 완료! ({checked_at.strftime('%Y-%m-%d')})"
+        return f"✅ <b>{escape(ct.name)}</b> 검진 기록 완료! ({checked_at.strftime('%Y-%m-%d')})"
 
 
 async def health_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

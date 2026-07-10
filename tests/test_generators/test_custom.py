@@ -108,3 +108,68 @@ def test_yearly_custom_lunar_year_carryover(db_session, monkeypatch):
     # 음력 2026-12-15 → 양력 2027-01-22
     assert date(2027, 1, 22) in scheduled_dates  # 당일
     assert date(2027, 1, 19) in scheduled_dates  # D-3
+
+
+def test_once_custom_escapes_message(db_session):
+    """1회성 custom 메시지도 escape되어야 한다 — yearly만 escape하던 비대칭 버그 (audit #13)."""
+    from datetime import UTC, datetime, timedelta
+
+    run_at = datetime.now(UTC) + timedelta(days=3)
+    rule = ReminderRule(
+        type=ReminderType.custom,
+        title="병원 예약",
+        lead_times_days=[0],
+        config={"message": "병원 예약 <오후 3시> & 검사", "run_at": run_at.isoformat()},
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    messages = [
+        n.message
+        for n in db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .all()
+    ]
+    assert messages
+    for msg in messages:
+        assert msg == "병원 예약 &lt;오후 3시&gt; &amp; 검사"
+
+
+def test_yearly_custom_escapes_message_once(db_session):
+    """yearly 경로는 escape를 한 번만 적용해야 한다 (이중 escape 회귀)."""
+    event_date = date.today() + timedelta(days=20)
+    rule = ReminderRule(
+        type=ReminderType.custom,
+        title="이벤트",
+        lead_times_days=[0],
+        config={
+            "repeat": "yearly",
+            "month": event_date.month,
+            "day": event_date.day,
+            "hour": 9,
+            "message": "행사 <A & B>",
+        },
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    messages = [
+        n.message
+        for n in db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .all()
+    ]
+    assert messages
+    for msg in messages:
+        assert "행사 &lt;A &amp; B&gt;" in msg
+        # 이중 escape(&amp;lt;) 되면 안 된다
+        assert "&amp;lt;" not in msg
+        assert "<b>" in msg

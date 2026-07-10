@@ -225,3 +225,25 @@ def test_birthday_lunar_year_carryover(db_session, monkeypatch) -> None:
     assert date(2027, 1, 22) in scheduled_dates  # 당일
     assert date(2027, 1, 21) in scheduled_dates  # D-1
     assert date(2027, 1, 15) in scheduled_dates  # D-7
+
+
+def test_birthday_escapes_name_with_html_chars(rule, member, db_session) -> None:
+    """이름에 '<' 등 HTML 특수문자가 있어도 escape되어야 텔레그램 파싱 실패를 막는다 (audit #11)."""
+    member.name = "엄마<3 & 아빠"
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    messages = [
+        n.message
+        for n in db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .all()
+    ]
+    assert messages
+    for msg in messages:
+        assert "엄마&lt;3 &amp; 아빠" in msg
+        # 원문 '<3'가 그대로 남으면 안 된다 (의도된 <b> 마크업은 유지)
+        assert "엄마<3" not in msg
+        assert "<b>" in msg

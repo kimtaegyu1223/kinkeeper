@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -74,7 +75,8 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             continue
 
         target_ids = get_target_telegram_ids(session, rule)
-        name = member.name
+        # 이름은 임의 입력이므로 HTML 특수문자를 escape (parse_mode=HTML 발송)
+        name = escape(member.name)
 
         for lead in rule.lead_times_days:
             notify_date = bday_solar - timedelta(days=lead)

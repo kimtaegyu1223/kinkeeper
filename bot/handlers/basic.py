@@ -1,3 +1,5 @@
+from html import escape
+
 import structlog
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -31,7 +33,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 chat_id=settings.group_chat_id,
                 text=(
                     f"🔔 새 사용자가 봇을 시작했습니다!\n\n"
-                    f"이름: <b>{name}</b>\n"
+                    # full_name은 사용자가 프로필에서 임의 설정하므로 escape 필수
+                    f"이름: <b>{escape(name)}</b>\n"
                     f"텔레그램 ID: <code>{user_id}</code>\n\n"
                     f"관리자 웹에서 가족 구성원으로 등록해주세요."
                 ),

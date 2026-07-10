@@ -58,3 +58,71 @@ def test_next_birthday_solar_lunar_year_carryover():
 def test_next_birthday_solar_none_when_unregistered():
     member = FamilyMember(name="미등록")
     assert _next_birthday_solar(member, date(2026, 6, 15)) is None
+
+
+class _FakeMessage:
+    def __init__(self) -> None:
+        self.replies: list[tuple[str, str | None]] = []
+
+    async def reply_text(self, text: str, parse_mode: str | None = None) -> None:
+        self.replies.append((text, parse_mode))
+
+
+class _FakeUser:
+    def __init__(self, user_id: int) -> None:
+        self.id = user_id
+
+
+class _FakeUpdate:
+    def __init__(self, user_id: int) -> None:
+        self.message = _FakeMessage()
+        self.effective_user = _FakeUser(user_id)
+
+
+async def test_birthday_command_escapes_name(db_engine, monkeypatch) -> None:
+    """/내생일 응답의 member.name이 escape되어야 한다 (audit #42)."""
+    from contextlib import contextmanager
+
+    from sqlalchemy.orm import sessionmaker
+
+    import bot.handlers.query as query
+    from bot.handlers.query import birthday_command
+
+    Session = sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    @contextmanager
+    def _get_session():
+        s = Session()
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
+    monkeypatch.setattr(query, "get_session", _get_session)
+
+    with _get_session() as s:
+        s.add(
+            FamilyMember(
+                name="철수<b> & 영희",
+                telegram_user_id=778899,
+                birthday_solar=date(1990, 8, 20),
+                active=True,
+            )
+        )
+
+    try:
+        update = _FakeUpdate(778899)
+        await birthday_command(update, None)  # type: ignore[arg-type]
+
+        assert update.message.replies
+        text, parse_mode = update.message.replies[-1]
+        assert parse_mode == "HTML"
+        assert "철수&lt;b&gt; &amp; 영희" in text
+        assert "철수<b> " not in text
+    finally:
+        with _get_session() as s:
+            s.query(FamilyMember).filter(FamilyMember.telegram_user_id == 778899).delete()

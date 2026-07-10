@@ -72,8 +72,10 @@ def _generate_once(
     if run_at <= datetime.now(UTC):
         return
 
+    # 메시지는 자유 입력이므로 escape (yearly 경로는 _format_yearly_message에서 이미 escape)
+    escaped_msg = escape(msg)
     for tid in target_ids:
-        upsert_notification(session, rule, run_at, tid, msg)
+        upsert_notification(session, rule, run_at, tid, escaped_msg)
 
 
 def _generate_yearly(

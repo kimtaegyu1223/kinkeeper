@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -26,7 +27,8 @@ def _scheduled_at_local(day: date, hour: int) -> datetime:
 def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> None:
     lunar_month = rule.config.get("lunar_month")
     lunar_day = rule.config.get("lunar_day")
-    holiday_name = rule.config.get("name", "명절")
+    # 명절 이름은 관리자 자유 입력이므로 HTML 특수문자를 escape (parse_mode=HTML 발송)
+    holiday_name = escape(rule.config.get("name", "명절"))
     hour = int(rule.config.get("hour", 9))
 
     if not lunar_month or not lunar_day:

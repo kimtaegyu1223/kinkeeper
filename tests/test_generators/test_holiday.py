@@ -56,3 +56,32 @@ def test_holiday_lunar_year_carryover(db_session, monkeypatch) -> None:
     # 음력 2026-12-20 → 양력 2027-01-27
     assert date(2027, 1, 27) in scheduled_dates  # 당일
     assert date(2027, 1, 20) in scheduled_dates  # D-7
+
+
+def test_holiday_escapes_name_with_html_chars(db_session, monkeypatch) -> None:
+    """명절 이름에 '<' 등이 있어도 escape되어야 발송 실패를 막는다 (audit #12)."""
+    monkeypatch.setattr(holiday_module, "_today_local", lambda: date(2026, 9, 1))
+    rule = ReminderRule(
+        type=ReminderType.holiday,
+        title="설날",
+        lead_times_days=[7, 3, 0],
+        config={"lunar_month": 8, "lunar_day": 15, "name": "설날<음력> & 추석", "hour": 9},
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    messages = [
+        n.message
+        for n in db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .all()
+    ]
+    assert messages
+    for msg in messages:
+        assert "설날&lt;음력&gt; &amp; 추석" in msg
+        assert "설날<음력>" not in msg
+        assert "<b>" in msg

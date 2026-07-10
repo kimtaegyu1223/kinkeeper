@@ -7,6 +7,7 @@ diet_active=True인 구성원에게:
 """
 
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -111,6 +112,9 @@ def build_bmi_report(member: FamilyMember, session: Session) -> str:
     """실제 발송 시점에 최신 몸무게로 BMI 리포트 생성."""
     assert member.height_cm is not None
 
+    # 이름은 임의 입력이므로 HTML 특수문자를 escape (parse_mode=HTML 발송)
+    member_name = escape(member.name)
+
     latest = session.scalar(
         select(WeightLog)
         .where(WeightLog.member_id == member.id)
@@ -119,7 +123,7 @@ def build_bmi_report(member: FamilyMember, session: Session) -> str:
     )
     if not latest:
         return (
-            f"📊 {member.name}님 BMI 리포트\n몸무게 기록이 없습니다. /몸무게 XX.X 로 입력해주세요!"
+            f"📊 {member_name}님 BMI 리포트\n몸무게 기록이 없습니다. /몸무게 XX.X 로 입력해주세요!"
         )
 
     bmi = _bmi(float(latest.weight_kg), member.height_cm)
@@ -161,7 +165,7 @@ def build_bmi_report(member: FamilyMember, session: Session) -> str:
             trend = "\n2주 전과 동일"
 
     return (
-        f"📊 <b>{member.name}님 격주 BMI 리포트</b>\n"
+        f"📊 <b>{member_name}님 격주 BMI 리포트</b>\n"
         f"몸무게: <b>{current:.1f}kg</b> | BMI: <b>{bmi:.1f}</b> ({status}){trend}\n"
         f"정상 범위: {low:.1f}~{high:.1f}kg\n"
         f"{diff_msg}"

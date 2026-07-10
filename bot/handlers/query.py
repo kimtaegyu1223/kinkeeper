@@ -99,26 +99,25 @@ async def birthday_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
+    # 이름은 임의 입력이므로 escape (parse_mode=HTML 회신). upcoming_command과 동일 패턴.
+    name = escape(member.name)
     today = datetime.now(UTC).date()
     this_year_bday = _next_birthday_solar(member, today)
 
     if this_year_bday is None:
-        text = (
-            f"<b>{member.name}</b>님의 생일이 등록되지 않았습니다.\n"
-            "관리자에게 생일 등록을 요청하세요."
-        )
+        text = f"<b>{name}</b>님의 생일이 등록되지 않았습니다.\n관리자에게 생일 등록을 요청하세요."
         await update.message.reply_text(text, parse_mode="HTML")
         return
 
     days_until = (this_year_bday - today).days
 
     if days_until == 0:
-        msg = f"🎂 오늘이 <b>{member.name}</b>님의 생일입니다! 🎉"
+        msg = f"🎂 오늘이 <b>{name}</b>님의 생일입니다! 🎉"
     elif days_until == 1:
-        msg = f"🎂 내일이 <b>{member.name}</b>님의 생일입니다!"
+        msg = f"🎂 내일이 <b>{name}</b>님의 생일입니다!"
     else:
         bday_str = this_year_bday.strftime("%m/%d")
-        msg = f"🎂 <b>{member.name}</b>님의 생일은 <b>{days_until}일 후</b>입니다.\n({bday_str})"
+        msg = f"🎂 <b>{name}</b>님의 생일은 <b>{days_until}일 후</b>입니다.\n({bday_str})"
 
     await update.message.reply_text(msg, parse_mode="HTML")
 

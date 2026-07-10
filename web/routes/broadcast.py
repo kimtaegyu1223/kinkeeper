@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from html import escape
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
@@ -33,21 +34,23 @@ def send_broadcast(
     admin: str = Depends(verify_admin),
 ) -> HTMLResponse:
     now = datetime.now(UTC)
+    text = message.strip()
 
     with get_session() as session:
-        # 그룹채널에만 발송
+        # 그룹채널에만 발송. 관리자 자유 입력이므로 escape (parse_mode=HTML 발송)
         notif = ScheduledNotification(
             scheduled_at=now,
             target_telegram_id=settings.group_chat_id,
-            message=message.strip(),
+            message=escape(text),
             status=NotificationStatus.pending,
         )
         session.add(notif)
         session.flush()
 
+        # AdminBroadcast는 감사 로그이므로 관리자가 입력한 원문을 그대로 보관
         broadcast = AdminBroadcast(
             sent_by=admin,
-            message=message.strip(),
+            message=text,
             sent_at=now,
         )
         session.add(broadcast)
