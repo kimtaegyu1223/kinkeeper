@@ -1,9 +1,13 @@
 # web
 
-관리자 전용 FastAPI + Jinja2 + HTMX 웹 인터페이스. 현재 미구현 — 스캐폴딩만 존재.
+관리자 전용 FastAPI + Jinja2 + HTMX 웹 인터페이스 (HTTP Basic 인증, 루프백 바인딩 + tailscale serve로 노출).
 
-구현 예정:
-- 가족 구성원 CRUD
-- 생일/명절/건강검진/커스텀 일정 관리
-- 수동 공지 발송
-- 다이어트 리포트 설정 및 몸무게 기록 열람
+구현된 라우트:
+- `/members` — 가족 구성원 CRUD (생일 양력/음력, 자동 생일 규칙 연동)
+- `/rules` — 알림 규칙 관리 (생일/명절·기일/커스텀 — 생성 가능 타입은 `_REGISTRY` 기준)
+- `/health-checks` — 건강검진 항목·완료 기록 관리
+- `/broadcast` — 그룹 채널 수동 공지 발송
+- `/diet` — 몸무게 기록 열람 (WEIGHT_FEATURE_ENABLED 활성 시 의미 있음)
+- `/healthz` — DB 연결 확인 (정상 200 / 장애 503)
+
+전체 구조는 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md), 운영은 [docs/OPERATIONS.md](../docs/OPERATIONS.md) 참조.
