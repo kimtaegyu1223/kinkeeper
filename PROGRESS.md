@@ -22,6 +22,8 @@
 
 ## 워크플로 실행 기록
 
+- P1 fix run: runId `wf_79aee676-8bd`, 스크립트 `/home/ktg/.claude/projects/-home-ktg-projects-kinkeeper-overhaul/e7c47067-c97e-4720-bdd6-c3d6ee6c51a3/workflows/scripts/kinkeeper-fix-p1-wf_79aee676-8bd.js` — 10그룹 순차(opus), 그룹당 1커밋. 끊기면 resumeFromRunId로 재개(완료 그룹은 캐시).
+
 - P1 audit run: runId `wf_d985770b-ba8`, 스크립트 `/home/ktg/.claude/projects/-home-ktg-projects-kinkeeper-overhaul/e7c47067-c97e-4720-bdd6-c3d6ee6c51a3/workflows/scripts/kinkeeper-bug-audit-wf_d985770b-ba8.js` (끊기면 resumeFromRunId로 재개, 저널: 같은 세션 transcript dir의 journal.jsonl)
   - 1차 실행: 파인더 12/12 완료(결과는 저널에 캐시됨) 후 세션 한도로 dedup/critic 실패 → 결과 빈 값
   - 2차(재개) 실행: 13:04 UTC 재개 — 파인더는 캐시 재생, dedup부터 라이브. 판정 에이전트(dedup/verify/critic/2라운드 파인더)는 model=opus로 라우팅
