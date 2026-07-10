@@ -13,14 +13,6 @@ from shared.lunar import lunar_to_solar
 from shared.models import FamilyMember, ReminderRule
 
 
-def _next_birthday(birthday: date, from_date: date) -> date:
-    """from_date 기준으로 다가오는 생일(올해 or 내년) 반환."""
-    this_year = replace_year(birthday, from_date.year)
-    if this_year >= from_date:
-        return this_year
-    return replace_year(birthday, from_date.year + 1)
-
-
 def _resolve_birthday_solar(member: FamilyMember, use_lunar: bool, year: int) -> date | None:
     """음력/양력 설정에 따라 해당 연도의 양력 생일 반환."""
     if use_lunar and member.birthday_lunar:
