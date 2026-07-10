@@ -38,7 +38,7 @@ def test_diet_active_has_server_default(db_engine) -> None:
 
 def test_insert_family_member(db_session) -> None:
     """FamilyMember insert/조회 기본 동작 확인."""
-    member = FamilyMember(name="테스트유저", timezone="Asia/Seoul")
+    member = FamilyMember(name="테스트유저")
     db_session.add(member)
     db_session.flush()
 

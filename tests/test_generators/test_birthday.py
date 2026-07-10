@@ -24,7 +24,6 @@ def member(db_session):
         name="테스트",
         telegram_user_id=99999,
         birthday_solar=FIXED_TODAY + timedelta(days=5),  # 5일 후 생일
-        timezone="Asia/Seoul",
     )
     db_session.add(m)
     db_session.flush()
@@ -89,7 +88,6 @@ def test_birthday_feb29_does_not_crash_on_common_year(db_session, monkeypatch) -
         name="윤일",
         telegram_user_id=42,
         birthday_solar=date(1996, 2, 29),
-        timezone="Asia/Seoul",
     )
     db_session.add(member)
     db_session.flush()
@@ -129,7 +127,6 @@ def test_birthday_skips_past_slot_today(db_session, monkeypatch) -> None:
         name="오늘생일",
         telegram_user_id=555,
         birthday_solar=today,
-        timezone="Asia/Seoul",
     )
     db_session.add(member)
     db_session.flush()
@@ -166,7 +163,6 @@ def test_birthday_keeps_future_slot_today(db_session, monkeypatch) -> None:
         name="오늘생일",
         telegram_user_id=556,
         birthday_solar=today,
-        timezone="Asia/Seoul",
     )
     db_session.add(member)
     db_session.flush()
@@ -198,7 +194,6 @@ def test_birthday_lunar_year_carryover(db_session, monkeypatch) -> None:
         name="음력12월",
         telegram_user_id=77,
         birthday_lunar=date(2000, 12, 15),  # 음력 12/15
-        timezone="Asia/Seoul",
     )
     db_session.add(member)
     db_session.flush()
