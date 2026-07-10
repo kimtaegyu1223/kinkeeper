@@ -21,7 +21,7 @@
   - **사용자 승인(2026-07-10): P2~P6 각 단계 끝나면 다음 단계 자동 진행. 묻지 말 것. 단 P7(main 머지+라이브 재시작)만 최종 확인 받기.**
 - [x] P3. 완료 (2026-07-10): 7항목 7커밋(7100f1b..5e66483) — 시간헬퍼 _time.py 통합, 잔재 추상화 제거, upsert 통일+ON CONFLICT(DO NOTHING/DO UPDATE), timezone 컬럼 제거(마이그레이션 c7f3a9e21b04 파일만), _REGISTRY 단일출처, TypedDict(config_schemas.py), job-queue extra 제거. 검증 148 passed/ruff/mypy 클린.
 - 원계획: arch-p2-plan.json의 refactor_p3 중 결정 비의존 항목(시간헬퍼 통합/target_ids 제거/upsert 통일+ON CONFLICT/timezone 컬럼 제거/타입 정합화/TypedDict/job-queue extra). 결정 의존 부분(enum diet 값, horizon 값, 음력 스키마)은 P7 이후로.
-- [ ] P4. 주석/독스트링 정비 + 커밋
+- [x] P4. 완료 (2026-07-10): 2커밋(57b7ae9 죽은코드, 57fcec0 주석) — 낡은 주석 5건 정정(취소→삭제, 격주 요일), 관문 모듈 독스트링 4건, 노이즈 제거. 148 passed.
 - [ ] P5. 문서 — README, ARCHITECTURE, .env.example, 운영 문서 + 커밋
 - [ ] P6. 테스트 보강 (누락 영역) + 커밋
 - [ ] P7. 최종 검증(전체 테스트/린트/타입) → main 머지 + 서비스 재시작 (사용자 확인 후)
