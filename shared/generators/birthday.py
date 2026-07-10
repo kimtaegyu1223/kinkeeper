@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.dates import replace_year
 from shared.generators.base import get_target_telegram_ids, upsert_notification
 from shared.lunar import lunar_to_solar
 from shared.models import FamilyMember, ReminderRule
@@ -11,10 +12,10 @@ from shared.models import FamilyMember, ReminderRule
 
 def _next_birthday(birthday: date, from_date: date) -> date:
     """from_date 기준으로 다가오는 생일(올해 or 내년) 반환."""
-    this_year = birthday.replace(year=from_date.year)
+    this_year = replace_year(birthday, from_date.year)
     if this_year >= from_date:
         return this_year
-    return birthday.replace(year=from_date.year + 1)
+    return replace_year(birthday, from_date.year + 1)
 
 
 def _resolve_birthday_solar(member: FamilyMember, use_lunar: bool, year: int) -> date | None:
@@ -53,14 +54,16 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
     today = _today_local()
     horizon = today + timedelta(days=horizon_days)
 
-    # 올해/내년 두 해 모두 시도 (음력은 매년 양력 날짜가 달라짐)
-    for year in (today.year, today.year + 1):
+    # 작년/올해/내년 세 해 모두 시도.
+    # (음력은 매년 양력 날짜가 달라지고, 음력 11~12월 생일은 이듬해 양력 1~2월에
+    #  떨어지므로 today가 연초일 때 today.year-1 음력 연도가 필요하다.)
+    for year in (today.year - 1, today.year, today.year + 1):
         bday_solar = _resolve_birthday_solar(member, use_lunar, year)
         if not bday_solar:
             continue
-        # 음력이면 이미 해당 연도 날짜, 양력이면 연도 교체
+        # 음력이면 이미 해당 연도 날짜, 양력이면 연도 교체 (2/29는 평년에 2/28로 폴백)
         if not use_lunar:
-            bday_solar = bday_solar.replace(year=year)
+            bday_solar = replace_year(bday_solar, year)
 
         if bday_solar < today or bday_solar > horizon:
             continue

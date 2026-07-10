@@ -1,10 +1,13 @@
 from collections.abc import Callable
 
+import structlog
 from sqlalchemy.orm import Session
 
 from shared.enums import NotificationStatus, ReminderType
 from shared.generators import birthday, custom, holiday
 from shared.models import ReminderRule, ScheduledNotification
+
+log = structlog.get_logger()
 
 GeneratorFn = Callable[[ReminderRule, Session, int], None]
 
@@ -24,8 +27,13 @@ def rebuild_upcoming(session: Session, horizon_days: int = 60) -> None:
 
     for rule in rules:
         generator = _REGISTRY.get(rule.type)
-        if generator:
+        if not generator:
+            continue
+        # 규칙 하나의 예외가 전체 재생성을 중단시키지 않도록 규칙별로 격리한다.
+        try:
             generator(rule, session, horizon_days)
+        except Exception:
+            log.exception("규칙 알림 생성 실패", rule_id=rule.id, rule_type=rule.type)
 
 
 def rebuild_for_rule(rule_id: int, session: Session, horizon_days: int = 60) -> None:

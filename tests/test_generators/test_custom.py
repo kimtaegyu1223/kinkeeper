@@ -74,3 +74,37 @@ def test_yearly_custom_lunar_converts_to_solar(db_session, monkeypatch):
     # 음력 8/6 (2026) → 양력 2026-09-16 이어야 하고, 양력 8/6 이면 안 된다.
     assert date(2026, 9, 16) in scheduled_dates
     assert date(2026, 8, 6) not in scheduled_dates
+
+
+def test_yearly_custom_lunar_year_carryover(db_session, monkeypatch):
+    """음력 12월 기일이 이듬해 양력 1월에 걸릴 때 연초 재생성에서 누락되면 안 된다 (audit #4)."""
+    monkeypatch.setattr(custom, "_today_local", lambda: date(2027, 1, 1))
+    rule = ReminderRule(
+        type=ReminderType.custom,
+        title="섣달 기일",
+        lead_times_days=[3, 0],
+        config={
+            "repeat": "yearly",
+            "month": 12,
+            "day": 15,
+            "hour": 9,
+            "use_lunar": True,
+            "message": "섣달 기일",
+        },
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=365)
+    db_session.flush()
+
+    scheduled_dates = {
+        n.scheduled_at.astimezone(ZoneInfo(settings.tz)).date()
+        for n in db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .all()
+    }
+    # 음력 2026-12-15 → 양력 2027-01-22
+    assert date(2027, 1, 22) in scheduled_dates  # 당일
+    assert date(2027, 1, 19) in scheduled_dates  # D-3

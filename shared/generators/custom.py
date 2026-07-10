@@ -87,7 +87,8 @@ def _generate_yearly(
     today = _today_local()
     horizon = today + timedelta(days=horizon_days)
 
-    for year in (today.year, today.year + 1):
+    # 음력 11~12월 기일은 이듬해 양력 1~2월에 떨어지므로 today.year-1도 시도한다.
+    for year in (today.year - 1, today.year, today.year + 1):
         event_date = _resolve_event_date(use_lunar, year, month, day)
         if event_date is None:
             continue

@@ -7,7 +7,7 @@
 <table>
   <thead>
     <tr>
-      <th>이름</th><th>텔레그램 ID</th><th>생일 (양력)</th><th>상태</th><th></th>
+      <th>이름</th><th>텔레그램 ID</th><th>생일</th><th>상태</th><th></th>
     </tr>
   </thead>
   <tbody>
@@ -15,7 +15,11 @@
     <tr>
       <td>{{ m.name }}</td>
       <td>{{ m.telegram_user_id or "—" }}</td>
-      <td>{{ m.birthday_solar.strftime("%m/%d") if m.birthday_solar else "—" }}</td>
+      <td>
+        {%- if m.birthday_solar %}{{ m.birthday_solar.strftime("%m/%d") }} (양력)
+        {%- elif m.birthday_lunar %}{{ m.birthday_lunar.strftime("%m/%d") }} (음력)
+        {%- else %}—{%- endif %}
+      </td>
       <td>{{ "활성" if m.active else "비활성" }}</td>
       <td>
         <a href="/members/{{ m.id }}/edit">수정</a> |
