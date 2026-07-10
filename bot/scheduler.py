@@ -1,9 +1,10 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.orm import Session
 
 from shared.config import settings
@@ -14,9 +15,17 @@ from shared.notifier import send_message
 
 log = structlog.get_logger()
 
+# 이보다 오래 지난 pending 알림은 발송하지 않고 취소한다 (다운타임 후 묵은 알림 폭주 방지, #56).
+_STALE_AFTER = timedelta(hours=24)
+# 이 기간을 지난 종료 상태(sent/failed/cancelled) 행은 03시 rebuild 때 정리한다 (audit #30).
+_RETENTION = timedelta(days=90)
 
-def _fetch_pending() -> list[tuple[int, int, str, str | None]]:
-    """발송 대기 중인 알림 조회. (id, target_telegram_id, message, source_key) 튜플 목록 반환."""
+
+def _fetch_pending() -> list[tuple[int, int, str, str | None, datetime]]:
+    """발송 대기 중인 알림 조회.
+
+    (id, target_telegram_id, message, source_key, scheduled_at) 튜플 목록 반환.
+    """
     now = datetime.now(UTC)
     with get_session() as session:
         rows = session.scalars(
@@ -28,17 +37,28 @@ def _fetch_pending() -> list[tuple[int, int, str, str | None]]:
             .order_by(ScheduledNotification.scheduled_at)
             .limit(50)
         ).all()
-        return [(r.id, r.target_telegram_id, r.message, r.source_key) for r in rows]
+        return [(r.id, r.target_telegram_id, r.message, r.source_key, r.scheduled_at) for r in rows]
 
 
 def _mark_sent(notification_id: int, success: bool, error: str | None = None) -> None:
+    """아직 pending인 행만 sent/failed로 갱신한다.
+
+    fetch~발송 사이에 웹 rebuild 등이 행을 취소/삭제했을 수 있으므로 status=pending
+    조건부 UPDATE로 덮어쓴다. 이미 pending이 아니면 아무것도 하지 않는다 (audit #27).
+    """
     with get_session() as session:
-        row = session.get(ScheduledNotification, notification_id)
-        if row is None:
-            return
-        row.status = NotificationStatus.sent if success else NotificationStatus.failed
-        row.sent_at = datetime.now(UTC)
-        row.error = error
+        session.execute(
+            update(ScheduledNotification)
+            .where(
+                ScheduledNotification.id == notification_id,
+                ScheduledNotification.status == NotificationStatus.pending,
+            )
+            .values(
+                status=NotificationStatus.sent if success else NotificationStatus.failed,
+                sent_at=datetime.now(UTC),
+                error=error,
+            )
+        )
 
 
 def _mark_cancelled(notification_id: int) -> None:
@@ -90,6 +110,24 @@ def _resolve_bmi_message(member_id: int) -> str | None:
         return build_bmi_report(member, session)
 
 
+def _purge_old_notifications(session: Session) -> int:
+    """보존기간을 지난 종료 상태(sent/failed/cancelled) 알림을 물리 삭제한다 (audit #30)."""
+    cutoff = datetime.now(UTC) - _RETENTION
+    result = session.execute(
+        delete(ScheduledNotification).where(
+            ScheduledNotification.status.in_(
+                [
+                    NotificationStatus.sent,
+                    NotificationStatus.failed,
+                    NotificationStatus.cancelled,
+                ]
+            ),
+            ScheduledNotification.scheduled_at < cutoff,
+        )
+    )
+    return cast("CursorResult[Any]", result).rowcount or 0
+
+
 def _do_rebuild() -> None:
     from shared.generators import rebuild_upcoming
     from shared.generators.diet_report import rebuild_diet_reports
@@ -103,11 +141,13 @@ def _do_rebuild() -> None:
             rebuild_diet_reports(session, horizon_days=settings.schedule_horizon_days)
         else:
             cancelled_diet_count = _cancel_pending_diet_notifications(session)
+        purged_count = _purge_old_notifications(session)
     log.info(
         "알림 예정 재생성 완료",
         horizon_days=settings.schedule_horizon_days,
         weight_feature_enabled=settings.weight_feature_enabled,
         cancelled_diet_count=cancelled_diet_count,
+        purged_count=purged_count,
     )
 
 
@@ -118,43 +158,58 @@ async def dispatch_pending() -> None:
         return
 
     log.info("발송 대기 알림 처리", count=len(pending))
-    for notification_id, chat_id, message, source_key in pending:
-        if source_key and source_key.startswith("diet:") and not settings.weight_feature_enabled:
-            await asyncio.to_thread(_mark_cancelled, notification_id)
+    now = datetime.now(UTC)
+    for notification_id, chat_id, message, source_key, scheduled_at in pending:
+        # 한 행의 예외가 배치 전체를 중단시켜 후속 행이 재발송되는 것을 막는다 (audit #28).
+        try:
+            # 너무 오래 지난(다운타임 등) 알림은 발송하지 않고 취소한다 (audit #56).
+            if now - scheduled_at > _STALE_AFTER:
+                await asyncio.to_thread(_mark_cancelled, notification_id)
+                continue
+
+            if (
+                source_key
+                and source_key.startswith("diet:")
+                and not settings.weight_feature_enabled
+            ):
+                await asyncio.to_thread(_mark_cancelled, notification_id)
+                continue
+
+            # diet nudge: 이번 주 기록이 있으면 취소
+            if source_key and source_key.startswith("diet:nudge:"):
+                parts = source_key.split(":")
+                # source_key format: diet:nudge:{member_id}:{date}
+                try:
+                    member_id = int(parts[2])
+                except (IndexError, ValueError):
+                    member_id = None
+                if member_id is not None:
+                    has_log = await asyncio.to_thread(_has_weight_log_this_week, member_id)
+                    if has_log:
+                        await asyncio.to_thread(_mark_cancelled, notification_id)
+                        continue
+
+            # BMI 리포트: 실시간으로 메시지 생성
+            if message.startswith("__bmi_report__:"):
+                try:
+                    member_id = int(message.split(":")[1])
+                except (IndexError, ValueError):
+                    member_id = None
+                if member_id is not None:
+                    resolved = await asyncio.to_thread(_resolve_bmi_message, member_id)
+                    if resolved:
+                        message = resolved
+
+            success = await send_message(chat_id, message)
+            await asyncio.to_thread(
+                _mark_sent,
+                notification_id,
+                success,
+                None if success else "발송 실패",
+            )
+        except Exception:
+            log.exception("알림 발송 처리 실패", notification_id=notification_id)
             continue
-
-        # diet nudge: 이번 주 기록이 있으면 취소
-        if source_key and source_key.startswith("diet:nudge:"):
-            parts = source_key.split(":")
-            # source_key format: diet:nudge:{member_id}:{date}
-            try:
-                member_id = int(parts[2])
-            except (IndexError, ValueError):
-                member_id = None
-            if member_id is not None:
-                has_log = await asyncio.to_thread(_has_weight_log_this_week, member_id)
-                if has_log:
-                    await asyncio.to_thread(_mark_cancelled, notification_id)
-                    continue
-
-        # BMI 리포트: 실시간으로 메시지 생성
-        if message.startswith("__bmi_report__:"):
-            try:
-                member_id = int(message.split(":")[1])
-            except (IndexError, ValueError):
-                member_id = None
-            if member_id is not None:
-                resolved = await asyncio.to_thread(_resolve_bmi_message, member_id)
-                if resolved:
-                    message = resolved
-
-        success = await send_message(chat_id, message)
-        await asyncio.to_thread(
-            _mark_sent,
-            notification_id,
-            success,
-            None if success else "발송 실패",
-        )
 
 
 async def rebuild_upcoming_async() -> None:

@@ -13,6 +13,10 @@ def _today_local() -> date:
     return datetime.now(ZoneInfo(settings.tz)).date()
 
 
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
 def _scheduled_at_local(day: date, hour: int) -> datetime:
     return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
         UTC
@@ -30,6 +34,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
 
     today = _today_local()
     horizon = today + timedelta(days=horizon_days)
+    now = _now_utc()
 
     # 음력 11~12월 명절/기일은 이듬해 양력 1~2월에 떨어지므로 today.year-1도 시도한다.
     for year in (today.year - 1, today.year, today.year + 1):
@@ -49,6 +54,9 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             if notify_date < today:
                 continue
             scheduled_at = _scheduled_at_local(notify_date, hour)
+            # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다 (audit #1).
+            if notify_date == today and scheduled_at < now:
+                continue
             if lead == 0:
                 msg = f"🎊 오늘은 <b>{holiday_name}</b>입니다! 가족과 즐거운 시간 보내세요."
             elif lead <= 3:

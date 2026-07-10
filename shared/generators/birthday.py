@@ -33,6 +33,10 @@ def _today_local() -> date:
     return datetime.now(ZoneInfo(settings.tz)).date()
 
 
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
 def _scheduled_at_local(day: date, hour: int) -> datetime:
     return datetime(day.year, day.month, day.day, hour, 0, tzinfo=ZoneInfo(settings.tz)).astimezone(
         UTC
@@ -53,6 +57,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
 
     today = _today_local()
     horizon = today + timedelta(days=horizon_days)
+    now = _now_utc()
 
     # 작년/올해/내년 세 해 모두 시도.
     # (음력은 매년 양력 날짜가 달라지고, 음력 11~12월 생일은 이듬해 양력 1~2월에
@@ -76,6 +81,9 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
             if notify_date < today:
                 continue
             scheduled_at = _scheduled_at_local(notify_date, hour)
+            # 오늘이지만 이미 지난 시각의 slot은 재생성하지 않는다 (audit #1).
+            if notify_date == today and scheduled_at < now:
+                continue
             bday_label = "음력" if use_lunar else "양력"
             if lead == 0:
                 msg = f"🎂 오늘은 <b>{name}</b>님의 생일({bday_label})입니다! 축하해주세요 🎉"

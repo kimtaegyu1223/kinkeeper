@@ -8,12 +8,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -87,6 +89,24 @@ class ScheduledNotification(Base):
     """규칙에서 파생된 실제 발송 예정 큐."""
 
     __tablename__ = "scheduled_notifications"
+    # 동시 rebuild(웹 워커 2 + 봇)로 같은 slot이 중복 insert되는 것을 DB 레벨에서 막는다.
+    # pending 행만 유니크하게 강제해 sent/cancelled 이력은 여러 건 남을 수 있도록 한다 (audit #29).
+    __table_args__ = (
+        Index(
+            "uq_sched_notif_rule_pending",
+            "rule_id",
+            "scheduled_at",
+            "target_telegram_id",
+            unique=True,
+            postgresql_where=text("status = 'pending' AND rule_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_sched_notif_source_pending",
+            "source_key",
+            unique=True,
+            postgresql_where=text("status = 'pending' AND source_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     rule_id: Mapped[int | None] = mapped_column(

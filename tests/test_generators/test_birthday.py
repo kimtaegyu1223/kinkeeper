@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -115,6 +115,80 @@ def test_birthday_feb29_does_not_crash_on_common_year(db_session, monkeypatch) -
     }
     # 평년에는 2/28로 폴백
     assert date(2026, 2, 28) in scheduled_dates
+
+
+def test_birthday_skips_past_slot_today(db_session, monkeypatch) -> None:
+    """오늘 생일(lead 0)이라도 발송 시각이 이미 지났으면 재생성하지 않는다 (audit #1)."""
+    today = date(2026, 6, 15)
+    monkeypatch.setattr(birthday_module, "_today_local", lambda: today)
+    # now = 오늘 12:00 KST → 09:00 KST slot은 이미 과거
+    now = datetime(2026, 6, 15, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
+    monkeypatch.setattr(birthday_module, "_now_utc", lambda: now)
+
+    member = FamilyMember(
+        name="오늘생일",
+        telegram_user_id=555,
+        birthday_solar=today,
+        timezone="Asia/Seoul",
+    )
+    db_session.add(member)
+    db_session.flush()
+    rule = ReminderRule(
+        type=ReminderType.birthday,
+        title="오늘 생일",
+        lead_times_days=[0],
+        config={"member_id": member.id, "hour": 9},
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    count = (
+        db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .count()
+    )
+    assert count == 0, "이미 지난 오늘 slot이 재생성됨"
+
+
+def test_birthday_keeps_future_slot_today(db_session, monkeypatch) -> None:
+    """오늘 생일이고 발송 시각이 아직 안 지났으면 생성한다 (audit #1 회귀)."""
+    today = date(2026, 6, 15)
+    monkeypatch.setattr(birthday_module, "_today_local", lambda: today)
+    # now = 오늘 06:00 KST → 09:00 KST slot은 아직 미래
+    now = datetime(2026, 6, 15, 6, 0, tzinfo=ZoneInfo("Asia/Seoul")).astimezone(UTC)
+    monkeypatch.setattr(birthday_module, "_now_utc", lambda: now)
+
+    member = FamilyMember(
+        name="오늘생일",
+        telegram_user_id=556,
+        birthday_solar=today,
+        timezone="Asia/Seoul",
+    )
+    db_session.add(member)
+    db_session.flush()
+    rule = ReminderRule(
+        type=ReminderType.birthday,
+        title="오늘 생일",
+        lead_times_days=[0],
+        config={"member_id": member.id, "hour": 9},
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    count = (
+        db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .count()
+    )
+    assert count == 1
 
 
 def test_birthday_lunar_year_carryover(db_session, monkeypatch) -> None:
