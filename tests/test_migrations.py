@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from testcontainers.postgres import PostgresContainer
 
 from shared.models import Base
@@ -127,3 +127,83 @@ def test_latest_two_revisions_downgrade(migration_env) -> None:
     command.upgrade(cfg, "head")
     assert "timezone" not in _columns(engine, "family_members")
     assert "uq_sched_notif_rule_pending" in _index_names(engine, "scheduled_notifications")
+
+
+def test_partial_unique_upgrade_dedups_existing_pending(migration_env) -> None:
+    """중복 pending이 있어도 a1b2c3d4e5f6 upgrade가 성공하고 그룹별 최신 1건만 pending으로 남는다.
+
+    운영 구코드의 중복 방지는 앱단 SELECT-후-INSERT(레이스 존재)뿐이라 동일
+    (rule_id, scheduled_at, target) 또는 동일 source_key pending이 2건 이상 존재할 수 있다.
+    자가정리(UPDATE ... cancelled)가 없으면 CREATE UNIQUE INDEX가 duplicate key로 실패해
+    단일 트랜잭션이 롤백되고 배포가 중단된다 (audit #29 마이그레이션 자가정리).
+    """
+    make_config, engine = migration_env
+    cfg = make_config()
+
+    # 파셜 유니크 인덱스 직전 리비전으로 내려 중복 pending을 심는다(인덱스가 없어 삽입 가능).
+    command.downgrade(cfg, _BEFORE_LAST_TWO)
+    assert "uq_sched_notif_rule_pending" not in _index_names(engine, "scheduled_notifications")
+
+    with engine.begin() as conn:
+        rule_id = conn.execute(
+            text(
+                "INSERT INTO reminder_rules (type, title, lead_times_days, config, active) "
+                "VALUES ('birthday', '중복테스트', '{0}', '{}', true) RETURNING id"
+            )
+        ).scalar_one()
+        # 동일 (rule_id, scheduled_at, target) pending 2건
+        conn.execute(
+            text(
+                "INSERT INTO scheduled_notifications "
+                "(rule_id, scheduled_at, target_telegram_id, message, status) VALUES "
+                "(:rid, '2026-08-01 00:00:00+00', 123, 'rule-old', 'pending'), "
+                "(:rid, '2026-08-01 00:00:00+00', 123, 'rule-new', 'pending')"
+            ),
+            {"rid": rule_id},
+        )
+        # 동일 source_key pending 2건
+        conn.execute(
+            text(
+                "INSERT INTO scheduled_notifications "
+                "(source_key, scheduled_at, target_telegram_id, message, status) VALUES "
+                "('hc:monthly:group:2026-08-01', '2026-08-01 00:00:00+00', 999, 'src-old', "
+                "'pending'), "
+                "('hc:monthly:group:2026-08-01', '2026-08-01 00:00:00+00', 999, 'src-new', "
+                "'pending')"
+            )
+        )
+
+    # 중복 pending이 있는데도 upgrade가 성공해야 한다.
+    command.upgrade(cfg, "head")
+    assert "uq_sched_notif_rule_pending" in _index_names(engine, "scheduled_notifications")
+    assert "uq_sched_notif_source_pending" in _index_names(engine, "scheduled_notifications")
+
+    with engine.connect() as conn:
+        # 그룹별로 최신(가장 큰 id, message ...-new) 1건만 pending, 나머지는 cancelled.
+        rule_rows = conn.execute(
+            text(
+                "SELECT message, status::text FROM scheduled_notifications "
+                "WHERE rule_id = :rid ORDER BY id"
+            ),
+            {"rid": rule_id},
+        ).all()
+        assert sorted((m, s) for m, s in rule_rows) == [
+            ("rule-new", "pending"),
+            ("rule-old", "cancelled"),
+        ]
+
+        src_rows = conn.execute(
+            text(
+                "SELECT message, status::text FROM scheduled_notifications "
+                "WHERE source_key = 'hc:monthly:group:2026-08-01' ORDER BY id"
+            )
+        ).all()
+        assert sorted((m, s) for m, s in src_rows) == [
+            ("src-new", "pending"),
+            ("src-old", "cancelled"),
+        ]
+
+    # 뒷 테스트/재실행 오염 방지를 위해 심은 행을 정리한다(스키마는 head 유지).
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM scheduled_notifications"))
+        conn.execute(text("DELETE FROM reminder_rules WHERE id = :rid"), {"rid": rule_id})
