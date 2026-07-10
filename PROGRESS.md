@@ -19,7 +19,8 @@
   - P7 질문 목록: ①다이어트 기능 폐기/유지/활성화 ②horizon 60/90/365 ③음력 윤달·2/30 해당자 유무(스키마 전환 여부) ④healthz 모니터 연결 ⑤pending 마이그레이션 배포 절차
   - 의식적 수용: exactly-once 발송 미도입(at-least-once + 24h staleness + 조건부 마킹으로 충분, 가족 규모)
   - **사용자 승인(2026-07-10): P2~P6 각 단계 끝나면 다음 단계 자동 진행. 묻지 말 것. 단 P7(main 머지+라이브 재시작)만 최종 확인 받기.**
-- [ ] P3. 리팩토링 — arch-p2-plan.json의 refactor_p3 중 결정 비의존 항목(시간헬퍼 통합/target_ids 제거/upsert 통일+ON CONFLICT/timezone 컬럼 제거/타입 정합화/TypedDict/job-queue extra). 결정 의존 부분(enum diet 값, horizon 값, 음력 스키마)은 P7 이후로.
+- [x] P3. 완료 (2026-07-10): 7항목 7커밋(7100f1b..5e66483) — 시간헬퍼 _time.py 통합, 잔재 추상화 제거, upsert 통일+ON CONFLICT(DO NOTHING/DO UPDATE), timezone 컬럼 제거(마이그레이션 c7f3a9e21b04 파일만), _REGISTRY 단일출처, TypedDict(config_schemas.py), job-queue extra 제거. 검증 148 passed/ruff/mypy 클린.
+- 원계획: arch-p2-plan.json의 refactor_p3 중 결정 비의존 항목(시간헬퍼 통합/target_ids 제거/upsert 통일+ON CONFLICT/timezone 컬럼 제거/타입 정합화/TypedDict/job-queue extra). 결정 의존 부분(enum diet 값, horizon 값, 음력 스키마)은 P7 이후로.
 - [ ] P4. 주석/독스트링 정비 + 커밋
 - [ ] P5. 문서 — README, ARCHITECTURE, .env.example, 운영 문서 + 커밋
 - [ ] P6. 테스트 보강 (누락 영역) + 커밋
