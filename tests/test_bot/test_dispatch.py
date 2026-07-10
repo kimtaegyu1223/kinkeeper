@@ -99,7 +99,7 @@ async def test_dispatch_cancels_stale_notifications(scheduler_db, monkeypatch) -
 
     async def fake_send(chat_id, message):
         sent.append(chat_id)
-        return True
+        return True, None
 
     monkeypatch.setattr(sched, "send_message", fake_send)
 
@@ -124,7 +124,7 @@ async def test_dispatch_isolates_row_failure(scheduler_db, monkeypatch) -> None:
 
     async def fake_send(chat_id, message):
         sent.append(chat_id)
-        return True
+        return True, None
 
     monkeypatch.setattr(sched, "send_message", fake_send)
 
@@ -198,7 +198,7 @@ async def test_dispatch_cancels_unresolvable_bmi(scheduler_db, monkeypatch) -> N
 
     async def fake_send(chat_id, message):
         sent.append(message)
-        return True
+        return True, None
 
     # diet: 알림은 feature-off 시 먼저 취소되므로, BMI resolve 경로를 타도록 기능을 켠다.
     monkeypatch.setattr(sched.settings, "weight_feature_enabled", True)
@@ -225,7 +225,7 @@ async def test_dispatch_sends_resolved_bmi(scheduler_db, monkeypatch) -> None:
 
     async def fake_send(chat_id, message):
         sent.append(message)
-        return True
+        return True, None
 
     monkeypatch.setattr(sched.settings, "weight_feature_enabled", True)
     monkeypatch.setattr(sched, "send_message", fake_send)
@@ -287,3 +287,33 @@ def test_create_scheduler_sets_misfire_grace_time() -> None:
 
     assert scheduler._job_defaults["misfire_grace_time"] == 3600
     assert scheduler._job_defaults["coalesce"] is True
+
+
+def test_create_scheduler_uses_settings_tz(monkeypatch) -> None:
+    """스케줄러 타임존은 'Asia/Seoul' 하드코딩이 아니라 settings.tz를 따라야 한다 (audit #75)."""
+    monkeypatch.setattr(sched.settings, "tz", "UTC")
+    scheduler = sched.create_scheduler()
+    assert str(scheduler.timezone) == "UTC"
+
+
+# ---------------------------------------------------------------------------
+# #8 발송 실패 시 notifier가 돌려준 실제 에러 상세를 error 컬럼에 저장
+# ---------------------------------------------------------------------------
+
+
+async def test_dispatch_stores_real_error_on_failure(scheduler_db, monkeypatch) -> None:
+    """실패 시 고정 문자열이 아니라 notifier가 준 에러 상세가 저장돼야 한다 (audit #8)."""
+    now = datetime.now(UTC)
+    nid = _add(scheduler_db, scheduled_at=now - timedelta(minutes=1))
+
+    async def fake_send(chat_id, message):
+        return False, "400 Bad Request: chat not found"
+
+    monkeypatch.setattr(sched, "send_message", fake_send)
+
+    await sched.dispatch_pending()
+
+    with scheduler_db() as s:
+        row = s.get(ScheduledNotification, nid)
+        assert row.status == NotificationStatus.failed
+        assert row.error == "400 Bad Request: chat not found"

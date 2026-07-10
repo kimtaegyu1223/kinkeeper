@@ -220,12 +220,12 @@ async def dispatch_pending() -> None:
                     continue
                 message = resolved
 
-            success = await send_message(chat_id, message)
+            success, error = await send_message(chat_id, message)
             await asyncio.to_thread(
                 _mark_sent,
                 notification_id,
                 success,
-                None if success else "발송 실패",
+                None if success else (error or "발송 실패"),
             )
         except Exception:
             log.exception("알림 발송 처리 실패", notification_id=notification_id)
@@ -241,8 +241,10 @@ def create_scheduler() -> AsyncIOScheduler:
     # 기본 misfire_grace_time은 1초라, 잡 실행이 1초만 늦어도 그 회차가 스킵된다.
     # 하루 1회뿐인 03시 rebuild가 이렇게 스킵되면 그날 재생성이 통째로 누락되므로
     # grace time을 넉넉히 준다 (audit #34).
+    # cron 발화 시각(03시)이 generator의 로컬 날짜 계산과 어긋나지 않도록 settings.tz를
+    # 그대로 쓴다. 'Asia/Seoul' 하드코딩은 tz를 다른 존으로 바꿀 때 불일치를 낳는다 (audit #75).
     scheduler = AsyncIOScheduler(
-        timezone="Asia/Seoul",
+        timezone=settings.tz,
         job_defaults={"misfire_grace_time": 3600, "coalesce": True},
     )
     # dispatch는 1분 주기라 다음 tick에 회복되므로 grace를 주기 이내로 둔다.

@@ -1,11 +1,13 @@
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 
+from shared.config import settings
 from shared.db import check_db_connection
 from web.routes.broadcast import router as broadcast_router
 from web.routes.diet import router as diet_router
@@ -15,7 +17,15 @@ from web.routes.rules import router as rules_router
 
 log = structlog.get_logger()
 
-app = FastAPI(title="KinKeeper 관리자", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # 필수 설정(토큰/그룹ID/tz) 검증 — 누락·오류면 즉시 중단 (audit #19, #75).
+    settings.validate_runtime()
+    yield
+
+
+app = FastAPI(title="KinKeeper 관리자", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 app.include_router(members_router)
 app.include_router(rules_router)
@@ -79,6 +89,8 @@ def root() -> RedirectResponse:
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, str]:
+def healthz() -> JSONResponse:
+    # DB 장애 시 body만 바꾸고 200을 주면 상태코드 기반 모니터가 장애를 놓친다 (audit #69).
     db_ok = check_db_connection()
-    return {"status": "ok" if db_ok else "db_error", "db": "ok" if db_ok else "error"}
+    body = {"status": "ok" if db_ok else "db_error", "db": "ok" if db_ok else "error"}
+    return JSONResponse(body, status_code=200 if db_ok else 503)

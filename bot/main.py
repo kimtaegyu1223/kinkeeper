@@ -85,6 +85,9 @@ def main() -> None:
         ]
     )
 
+    # 필수 설정(토큰/그룹ID/tz) 검증 — 누락·오류면 즉시 중단 (audit #19, #75).
+    settings.validate_runtime()
+
     scheduler = create_scheduler()
 
     app = Application.builder().token(settings.telegram_bot_token).build()
