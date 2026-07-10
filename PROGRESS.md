@@ -15,9 +15,11 @@
   - G4a 웹 수명주기 [15,16,43,44,60,63] / G4b 웹 검증·CSRF [18,25,37,45,46,47,58,59,61,62] / G5 봇 견고성 [9,23,34,35,36,48,55,74,76]
   - G6 시간대·다이어트 [6,7,31,32,33] / G7 발송기·설정 [8,10,19,67,68,69,75] / G8 배포·마이그레이션 [20,21,49,50,70,71,72,73] / G9 잔여 [17,22,57,64,66]
   - **보류(뒤 단계로)**: #51 alembic 기반 테스트(P6), #53 윤달 지원(P2 결정), #65 async 내 동기 DB(P2 결정)
-- [ ] P2. 아키텍처 리뷰 — 안 도는 것/죽은 코드/과잉 엔지니어링 → 보고 + 안전한 것 정리
+- [x] P2. 완료 (2026-07-10): 리뷰 28건 → 즉시적용 5(커밋 5c199c2) / P3행 8 / **사용자결정 5(P7에서 질문)** / 기각 4. 상세: `docs/arch-p2-plan.json`
+  - P7 질문 목록: ①다이어트 기능 폐기/유지/활성화 ②horizon 60/90/365 ③음력 윤달·2/30 해당자 유무(스키마 전환 여부) ④healthz 모니터 연결 ⑤pending 마이그레이션 배포 절차
+  - 의식적 수용: exactly-once 발송 미도입(at-least-once + 24h staleness + 조건부 마킹으로 충분, 가족 규모)
   - **사용자 승인(2026-07-10): P2~P6 각 단계 끝나면 다음 단계 자동 진행. 묻지 말 것. 단 P7(main 머지+라이브 재시작)만 최종 확인 받기.**
-- [ ] P3. 리팩토링 (중복 제거, 단순화) + 커밋
+- [ ] P3. 리팩토링 — arch-p2-plan.json의 refactor_p3 중 결정 비의존 항목(시간헬퍼 통합/target_ids 제거/upsert 통일+ON CONFLICT/timezone 컬럼 제거/타입 정합화/TypedDict/job-queue extra). 결정 의존 부분(enum diet 값, horizon 값, 음력 스키마)은 P7 이후로.
 - [ ] P4. 주석/독스트링 정비 + 커밋
 - [ ] P5. 문서 — README, ARCHITECTURE, .env.example, 운영 문서 + 커밋
 - [ ] P6. 테스트 보강 (누락 영역) + 커밋
@@ -25,6 +27,7 @@
 
 ## 워크플로 실행 기록
 
+- P2 arch review run: runId `wf_9eb428cb-2d1`, 스크립트 `.../kinkeeper-arch-review-p2-wf_9eb428cb-2d1.js` — 4렌즈 리뷰(병렬 opus) → 종합 → 안전 정리 적용
 - P1 fix run: runId `wf_79aee676-8bd`, 스크립트 `/home/ktg/.claude/projects/-home-ktg-projects-kinkeeper-overhaul/e7c47067-c97e-4720-bdd6-c3d6ee6c51a3/workflows/scripts/kinkeeper-fix-p1-wf_79aee676-8bd.js` — 10그룹 순차(opus), 그룹당 1커밋. 끊기면 resumeFromRunId로 재개(완료 그룹은 캐시).
 
 - P1 audit run: runId `wf_d985770b-ba8`, 스크립트 `/home/ktg/.claude/projects/-home-ktg-projects-kinkeeper-overhaul/e7c47067-c97e-4720-bdd6-c3d6ee6c51a3/workflows/scripts/kinkeeper-bug-audit-wf_d985770b-ba8.js` (끊기면 resumeFromRunId로 재개, 저널: 같은 세션 transcript dir의 journal.jsonl)

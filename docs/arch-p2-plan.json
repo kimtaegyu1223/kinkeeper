@@ -1,0 +1,143 @@
+{
+ "refactor_p3": [
+  {
+   "title": "생성기 5개에 복붙된 시간 헬퍼 통합 (#11)",
+   "instruction": "_today_local/_now_utc/_scheduled_at_local이 birthday.py, holiday.py, custom.py, health_check.py, diet_report.py에 사실상 동일하게 복사돼 있다(시간대 버그 #6/#31 재발 위험). shared/dates.py(이미 replace_year 보유)나 새 shared/generators/_time.py에 today_local()/now_utc()/scheduled_at_local(day, hour=9)을 단일 정의하고 5개 생성기가 import하도록 교체. health_check/diet_report의 hour 기본값 9는 인자 기본값으로 흡수. 순수 리팩토링이므로 각 생성기 테스트로 동작 동일성 확인.",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/birthday.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/holiday.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/custom.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/health_check.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/diet_report.py"
+   ]
+  },
+  {
+   "title": "잔재 추상화 get_target_telegram_ids 제거 및 단일-원소 루프 정리 (#6, #13 병합)",
+   "instruction": "shared/generators/base.py:81-85 get_target_telegram_ids는 session/rule 두 인자를 무시하고 항상 [settings.group_chat_id]를 반환한다(구성원별→그룹 단일 발송 전환의 잔재). birthday/holiday/custom가 `target_ids = get_target_telegram_ids(...)` 후 `for tid in target_ids` 루프로 감싸지만 원소가 항상 1개다. 헬퍼를 삭제하고 세 생성기에서 settings.group_chat_id로 직접 upsert_notification 호출, for 루프 제거. '다중 대상' 오해를 코드에서 없앤다. 각 생성기 테스트로 발송 동작 동일성 확인.",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/base.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/birthday.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/holiday.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/custom.py"
+   ]
+  },
+  {
+   "title": "source_key upsert 규칙 통일 + 백로그 ON CONFLICT 전환 + 야간 churn 감소 (#14 a/b/c)",
+   "instruction": "P3 계획: (a) source_key 알림 upsert 규칙을 하나로 통일한다 — diet_report는 upsert_notification_by_key(insert-only), health_check는 자체 _upsert_health_notification(update-in-place)로 갈려 있어 같은 개념에 두 규칙이 공존. health_check 래퍼를 base 헬퍼로 흡수해 한 가지 패턴으로. (b) 백로그의 'ON CONFLICT 전환'을 적용하면 base의 앱단 SELECT-exists 체크(upsert_notification/upsert_notification_by_key)를 제거하고 partial unique index(models.py:96-111) 한 겹에 위임 가능. partial unique index 자체는 저렴하므로 유지. (c) schedule_horizon_days를 줄이면(user_decision에서 값 확정) 매일 밤 pending 전량 삭제 후 재삽입하는 churn이 감소 — 야간 rebuild가 창을 계속 연장하므로 1년치가 불필요. 이 항목은 horizon 값 결정 user_decision과 함께 진행.",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/base.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/health_check.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/diet_report.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/models.py"
+   ]
+  },
+  {
+   "title": "write-only FamilyMember.timezone 컬럼 제거 (#3)",
+   "instruction": "P3 계획: FamilyMember.timezone(models.py:43, default 'Asia/Seoul')은 저장만 되고 프로덕션 코드 어디서도 읽히지 않는다(모든 시각 계산은 전역 settings.tz 사용). 유일한 참조는 테스트 픽스처. 가족 전원이 동일 타임존을 쓰는 맥락상 제거가 단순함에 부합. 작업: drop_column 마이그레이션 추가 + 모델 필드 제거 + test_db_schema.py/test_birthday.py 픽스처의 timezone= 인자 정리. (구성원별 타임존을 앞으로 쓸 계획이 없음을 전제 — 만약 계획이 있으면 user_decision으로 승격.)",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/shared/models.py",
+    "/home/ktg/projects/kinkeeper-overhaul/tests/test_db_schema.py",
+    "/home/ktg/projects/kinkeeper-overhaul/tests/test_generators/test_birthday.py"
+   ]
+  },
+  {
+   "title": "ReminderType 타입 체계 정합화 + 네이티브 PG enum 가이드 (#10, #5 비-diet부분, #28 병합)",
+   "instruction": "P3 계획: (코드) '규칙 생성 가능 타입'의 단일 출처를 _REGISTRY.keys()로 삼고, rules.py의 별도 _UNSUPPORTED_RULE_TYPES(:40) 목록과 :97 가드를 'parsed not in _REGISTRY면 거부'로 대체한다. health_check는 _REGISTRY에 없으므로 자동으로 규칙 저장이 거부되고(전용 rebuild_health_checks가 구동), 정합성이 오른다. (스키마) type 컬럼이 네이티브 PG enum(remindertype, 마이그레이션 50cad0b53392)이라 enum 멤버 제거는 enum 재생성 마이그레이션이 필요 — diet 기능 폐기 결정 시 diet_report 값 제거를 여기에 묶는다. (문서) 운영 가이드에 'enum 값 추가 시 op.execute(\"ALTER TYPE remindertype ADD VALUE ...\")를 트랜잭션 밖에서 수동 작성' 한 줄 남겨 초보 운영자 함정 예방. 지금 enum→varchar 전환은 불필요(자주 안 바뀜).",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/shared/enums.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/__init__.py",
+    "/home/ktg/projects/kinkeeper-overhaul/web/routes/rules.py"
+   ]
+  },
+  {
+   "title": "JSONB config 스키마를 TypedDict로 코드 문서화 (#25)",
+   "instruction": "P3 계획: config JSONB는 type마다 형태가 다르다(birthday={member_id,use_lunar,hour}, holiday={name,lunar_month,lunar_day,hour}, custom-yearly={message,repeat,month,day,use_lunar,hour}, custom-once={message,run_at,hour}). 이 형태가 한 곳에도 선언돼 있지 않아 초보 운영자가 3~4개 파일을 교차 확인해야 한다. shared/에 BirthdayConfig/HolidayConfig/CustomConfig TypedDict를 선언하고 models.py ReminderRule.config docstring에서 참조. 생성기·rules.py가 같은 TypedDict를 import하면 mypy가 키 오타를 잡는 부수효과. 주의: Pydantic 런타임 검증 계층은 이 규모에 과잉이므로 넣지 말 것(관리자 1명 폼 입력, 임의 JSON 주입 경로 없음).",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/shared/models.py",
+    "/home/ktg/projects/kinkeeper-overhaul/web/routes/rules.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/birthday.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/holiday.py",
+    "/home/ktg/projects/kinkeeper-overhaul/shared/generators/custom.py"
+   ]
+  },
+  {
+   "title": "python-telegram-bot[job-queue] extra 제거 (#7)",
+   "instruction": "P3 계획: pyproject.toml:18 `python-telegram-bot[job-queue]>=22.7`의 [job-queue] extra는 PTB의 Application.job_queue용인데 코드는 JobQueue를 전혀 안 쓰고(grep 0건) bot/scheduler.py가 AsyncIOScheduler를 직접 생성한다. apscheduler>=3.10도 별도 명시 의존성이라 중복. extra를 떼어 `python-telegram-bot>=22.7`로 바꾸고 uv.lock 재생성 후 봇 기동·폴링을 실제로 확인(의존성 잠금 변경이라 검증 필수). 이 리팩토링 후 위 README v22 정정과도 일관.",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/pyproject.toml"
+   ]
+  },
+  {
+   "title": "Alembic-vs-모델 스키마 드리프트 감지 테스트 추가 (#21, 백로그 #51, P6)",
+   "instruction": "P6 테스트 강화 단계 계획: 현재 conftest.py:22가 Base.metadata.create_all로 모델 파생 스키마를 만들어 모든 테스트가 그 위에서 돌고, test_migrations.py는 downgrade/upgrade 가역성만 본다. 프로덕션은 Alembic으로 빌드되므로 마이그레이션 누락 시 모델과 조용히 갈라진다(test_db_schema.py:26이 diet_active 한 컬럼만 수동 방어). 빈 DB를 alembic upgrade head로 올린 뒤 Base.metadata와 diff(autogenerate 비교/리플렉션 diff)하는 테스트를 추가해, 대응 마이그레이션 없는 모델 변경이 CI에서 실패하게 한다.",
+   "files": [
+    "/home/ktg/projects/kinkeeper-overhaul/tests/conftest.py",
+    "/home/ktg/projects/kinkeeper-overhaul/tests/test_migrations.py",
+    "/home/ktg/projects/kinkeeper-overhaul/tests/test_db_schema.py"
+   ]
+  }
+ ],
+ "user_decisions": [
+  {
+   "title": "다이어트/몸무게 기능의 운명 (#1, #9, #18, #26, #5, #8 통합)",
+   "question": "weight_feature_enabled=False로 프로덕션에서 완전히 꺼진 다이어트/몸무게 기능(전용 코드 ~360줄+ · 전용 테스트 ~280줄 · WeightLog 테이블 · FamilyMember.height_cm/diet_active · diet_report enum · dispatch_pending 내 여러 조건 분기)을 앞으로 켤 계획이 있는가? 지금처럼 '꺼진 채 상주'가 발송 경로와 모델을 읽기 어렵게 만들고 유지보수 부담이 가장 큰 상태다. 참고: /diet 웹 라우트는 게이팅이 없어 꺼진 상태에서도 관리자 웹에 노출되고, WeightLog.note는 기록 경로가 없어 항상 NULL이며, diet_report enum은 '거부용'으로만 존재한다. (문서 측면: README는 다이어트를 헤드라인 기능으로 소개하지만 실제로는 기본 비활성이고 live .env에 플래그가 아예 없다.)",
+   "options": [
+    "폐기: diet 전용 파일 4개(weight.py/diet_report.py/diet route/diet 템플릿) + 스케줄러 diet 분기 + WeightLog·height_cm·diet_active 컬럼(drop 마이그레이션) + diet_report enum값 + 전용 테스트를 통째로 제거. dispatch_pending과 모델이 눈에 띄게 단순해짐(가족 5명·단순함 우선 맥락에서 코드량 최대 감소)",
+    "유지(보류): 코드 보존하되 (1) /diet 라우트에도 weight_feature_enabled 게이팅 추가해 진입점 일관성 확보, (2) README/ARCHITECTURE에서 opt-in 기능으로 강등하고 .env 블록에 WEIGHT_FEATURE_ENABLED 명시, (3) 모델에 '보류 중' 주석",
+    "즉시 활성화: live .env에 WEIGHT_FEATURE_ENABLED=true 설정하고 실사용 시작(단 WeightLog.note 입력 수단 부재 등 미완성 부분 보완 필요)"
+   ]
+  },
+  {
+   "title": "스케줄링 horizon 최종 값 결정 및 문서 정합 (#16 값, #17)",
+   "question": "예약 horizon을 며칠로 할 것인가? 현재 config 기본값·.env·live .env 모두 365이지만 README(116줄 SCHEDULE_HORIZON_DAYS=60, 205줄 '60일')와 ARCHITECTURE(154줄 '60일치')는 60이라 문서와 config가 어긋난다. 야간 rebuild가 매일 창을 연장하므로 굳이 1년일 필요는 없고(#14c), 값이 클수록 매일 밤 pending 전량 삭제·재삽입 churn이 커진다. apply_now에서 웹/야간 경로가 config를 단일 출처로 쓰도록 이미 통일했으니, 여기서 실제 숫자만 확정하면 config·.env·README·ARCHITECTURE를 그 값으로 일괄 정정한다.",
+   "options": [
+    "60일 (문서와 일치, 야간 churn 최소 — config/.env를 60으로 내리고 문서 유지)",
+    "90일 (여유 + 낮은 churn 절충 — config/.env/문서 모두 90으로)",
+    "365일 (현재 config 유지 — README/ARCHITECTURE를 365로 정정)"
+   ]
+  },
+  {
+   "title": "birthday_lunar 센티널(date(2000,m,d)) 전환 여부 (#24)",
+   "question": "가족 구성원 중 실제로 음력 윤달 생일이거나 음력 2월 30일 생일인 사람이 있는가? 현재 birthday_lunar가 Date 컬럼이고 연도 2000은 자리표시자라, 윤달은 표현 불가(lunar_to_solar가 isIntercalation=False 하드코딩)하고 음력 2/30은 date(2000,2,30) ValueError로 등록 자체가 거부되며, 나이 계산도 센티널 우회 로직(health_check min_age 보수적 포함, query.py 3개년 스캔)을 강요한다. 전환안(month/day/is_leap 3컬럼)은 마이그레이션 무손실이고 깔끔하지만, 해당자가 아무도 없으면 센티널은 조용히 잘 동작하므로 4개 호출부+마이그레이션을 건드릴 이유가 약하다.",
+   "options": [
+    "해당자 있음(윤달 또는 음력 2/30 생일) → refactor-p3로 (month,day,is_leap) 3컬럼 전환 진행",
+    "해당자 없음 → 센티널 유지, 변경하지 않음"
+   ]
+  },
+  {
+   "title": "/healthz 엔드포인트 모니터링 여부 (#23)",
+   "question": "web/main.py:91의 GET /healthz는 DB 연결을 확인하고 실패 시 503을 반환하는 감시용 엔드포인트인데, 이를 폴링하는 소비자(systemd/cron/외부 uptime)가 하나도 없고 문서에도 없다. systemd 유닛은 Restart=on-failure(프로세스 생존)만 있어 '프로세스는 떠 있는데 DB가 끊긴' 상황(=healthz가 잡으려던 바로 그 케이스)을 못 잡는다. 가족 5명 규모에서 얼마나 감시를 원하는가?",
+   "options": [
+    "cron이 주기적으로 curl해 실패 시 admin 텔레그램으로 경보(가벼운 모니터 추가)",
+    "모니터는 안 붙이고 ARCHITECTURE에 /healthz 존재와 '현재 미연결'을 문서화만",
+    "그대로 방치(사실상 미사용)"
+   ]
+  },
+  {
+   "title": "pending 마이그레이션 a1b2c3d4e5f6 배포 처리 (#22)",
+   "question": "체인 head인 a1b2c3d4e5f6(scheduled_notifications pending partial-unique index)는 아직 live DB에 적용되지 않았다(단일 head라 multi-head 문제는 없음). deploy.sh가 `alembic upgrade head`를 무조건 실행하는데, live 테이블에 같은 (source_key/rule slot)의 중복 pending 행이 있으면 index 생성이 실패한다. P7 병합/재시작 전에 어떻게 처리할까?",
+   "options": [
+    "안전 배포: 배포 전 live DB에서 중복 pending 행 존재 여부를 SELECT로 점검하고, 있으면 정리한 뒤 alembic upgrade head 실행(권장 — 명시적 배포 단계로 취급)",
+    "무점검 upgrade: 중복이 없다고 확신하고 바로 upgrade 시도(실패 시 롤백)"
+   ]
+  }
+ ],
+ "reject": [
+  {
+   "title": "scheduled_notifications 인덱스/상태기계 손대기 (#27)",
+   "reason": "리뷰 스스로 '변경 불필요'로 결론냄. pending/sent/failed/cancelled 상태기계는 partial unique index 2개(#29), _mark_sent 조건부 UPDATE(#27), _purge_old_notifications 90일 삭제(#30)로 이미 규모에 견고하다. 거의 안 쓰이는 단일 status/scheduled_at 인덱스를 지워 쓰기 오버헤드를 줄일 수 있으나 수십~수백 행 규모에서 체감 0이라 불필요. (MEMORY.md의 '행 무한 증식' 노트가 purge로 해소됐음에도 stale한 것은 별개 — 코드 문제 아님. 다음 consolidate-memory 때 갱신하면 됨.)"
+  },
+  {
+   "title": "웹 '2프로세스' 재구성 (#15)",
+   "reason": "리뷰 지시의 전제가 틀렸음을 확인. 앱 인스턴스가 2개가 아니라 uvicorn 단일(127.0.0.1:8000 루프백 바인딩) + tailscale serve 리버스프록시 1개다(Requires=로 순서 보장). LAN 노출을 피하고 tailnet HTTPS만 여는 최소 구성이라 과잉이 아니고 변경 불필요. 실제 토폴로지 오해 소지는 models.py 주석 정정(apply_now)으로 이미 해소. ARCHITECTURE에 '앱1+프록시1' 한 줄 추가는 P5 문서 작업으로 남길 수 있음(선택)."
+  },
+  {
+   "title": "FamilyMember 테이블 분리(HealthProfile/DietProfile 정규화) (#26 정규화 부분)",
+   "reason": "행이 5개인 테이블에서 관심사별 테이블 분리는 JOIN·마이그레이션·코드 복잡도만 늘리는 순수 과잉 엔지니어링이고 초보 운영자에게 특히 역효과. gender는 health_check 성별 필터에 실제 사용되어 정당. 진짜 냄새는 '혼재'가 아니라 꺼진 다이어트 기능이며 그것은 별도 user_decision에서 다룸."
+  },
+  {
+   "title": "JSONB config에 Pydantic 런타임 검증 계층 추가 (#25 일부)",
+   "reason": "관리자 1명이 웹 폼으로만 config를 쓰므로 임의 JSON 주입 경로가 없고, 누락 키는 생성기가 .get(key,default)+조기 return으로 안전 처리 중이라 런타임 검증 계층은 이 규모에 과잉. 진짜 비용은 '스키마가 코드로 문서화 안 됨'이므로 런타임 비용 0인 TypedDict 문서화로 충분(refactor-p3에 반영)."
+  }
+ ]
+}
