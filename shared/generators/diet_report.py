@@ -14,8 +14,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shared.config import settings
+from shared.enums import NotificationStatus
 from shared.generators.base import upsert_notification_by_key
-from shared.models import FamilyMember, WeightLog
+from shared.models import FamilyMember, ScheduledNotification, WeightLog
+
+# 격주 BMI 리포트 패리티 기준 월요일(고정 epoch). 리빌드 실행 주와 무관하게
+# 절대 주차로 짝/홀을 판정하기 위한 앵커다 (audit #33). 1970-01-05는 월요일.
+_BIWEEKLY_EPOCH = date(1970, 1, 5)
 
 
 def _monday_of_week(d: date) -> date:
@@ -56,25 +61,49 @@ def rebuild_diet_reports(
         )
     ).all()
 
+    desired_source_keys: set[str] = set()
     for member in members:
         if not member.telegram_user_id or not member.height_cm:
             continue
-        _schedule_member(session, member, today, horizon)
+        _schedule_member(session, member, today, horizon, desired_source_keys)
+
+    # 이번 rebuild가 원하지 않는 diet:% pending을 취소한다. diet_active/active off,
+    # height 제거 등으로 대상에서 빠진 구성원의 묵은 알림이 계속 발송되는 것을 막는다
+    # (audit #7, health_check의 _cancel_stale_health_notifications와 동일 패턴).
+    _cancel_stale_diet_notifications(session, desired_source_keys)
 
 
-def _schedule_member(session: Session, member: FamilyMember, today: date, horizon: date) -> None:
+def _cancel_stale_diet_notifications(session: Session, desired_source_keys: set[str]) -> None:
+    rows = session.scalars(
+        select(ScheduledNotification).where(
+            ScheduledNotification.source_key.like("diet:%"),
+            ScheduledNotification.status == NotificationStatus.pending,
+        )
+    ).all()
+    for row in rows:
+        if row.source_key not in desired_source_keys:
+            row.status = NotificationStatus.cancelled
+
+
+def _schedule_member(
+    session: Session,
+    member: FamilyMember,
+    today: date,
+    horizon: date,
+    desired_source_keys: set[str],
+) -> None:
     assert member.telegram_user_id is not None
     assert member.height_cm is not None
 
     # 이번 주 월요일부터 시작
     monday = _monday_of_week(today)
-    week_num = 0
 
     while monday <= horizon:
         # 매주 월요일: 몸무게 입력 알림
         if monday >= today:
             scheduled_at = _scheduled_at_local(monday)
             source_key = f"diet:remind:{member.id}:{monday.isoformat()}"
+            desired_source_keys.add(source_key)
             msg = "⚖️ 이번 주 몸무게를 입력해주세요!\n→ <code>/몸무게 XX.X</code>"
             upsert_notification_by_key(
                 session, source_key, scheduled_at, member.telegram_user_id, msg
@@ -87,17 +116,21 @@ def _schedule_member(session: Session, member: FamilyMember, today: date, horizo
                 continue
             scheduled_at = _scheduled_at_local(nudge_date)
             source_key = f"diet:nudge:{member.id}:{nudge_date.isoformat()}"
+            desired_source_keys.add(source_key)
             msg = "⚖️ 아직 이번 주 몸무게를 입력하지 않았어요!\n→ <code>/몸무게 XX.X</code>"
             upsert_notification_by_key(
                 session, source_key, scheduled_at, member.telegram_user_id, msg
             )
 
-        # 격주 월요일: BMI 리포트 (week_num 짝수 주)
-        if week_num % 2 == 0 and monday >= today:
+        # 격주 월요일: BMI 리포트. 패리티를 고정 epoch 기준 절대 주차로 판정해
+        # 리빌드 실행 주와 무관하게 항상 같은 주에만 발송한다 (audit #33).
+        absolute_week = (monday - _BIWEEKLY_EPOCH).days // 7
+        if absolute_week % 2 == 0 and monday >= today:
             report_date = monday + timedelta(days=1)  # 화요일에 발송 (월요일 기록 반영)
             if report_date <= horizon:
                 scheduled_at = _scheduled_at_local(report_date)
                 source_key = f"diet:bmi:{member.id}:{report_date.isoformat()}"
+                desired_source_keys.add(source_key)
                 # 메시지는 실제 발송 시점에 동적으로 생성해야 하므로 placeholder
                 msg = f"__bmi_report__:{member.id}"
                 upsert_notification_by_key(
@@ -105,7 +138,6 @@ def _schedule_member(session: Session, member: FamilyMember, today: date, horizo
                 )
 
         monday += timedelta(weeks=1)
-        week_num += 1
 
 
 def build_bmi_report(member: FamilyMember, session: Session) -> str:

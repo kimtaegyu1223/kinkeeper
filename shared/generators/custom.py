@@ -65,10 +65,12 @@ def _generate_once(
         return
 
     run_at = datetime.fromisoformat(run_at_str)
+    # datetime-local 폼은 타임존 없는 로컬(KST) 벽시계 문자열을 보내므로,
+    # naive면 settings.tz로 해석한 뒤 UTC로 변환한다 (audit #6). 그렇지 않으면
+    # UTC로 오해석해 KST 기준 9시간 늦게 발송된다.
     if run_at.tzinfo is None:
-        run_at = run_at.replace(tzinfo=UTC)
+        run_at = run_at.replace(tzinfo=ZoneInfo(settings.tz)).astimezone(UTC)
 
-    # run_at에 이미 시각이 있으면 그대로, 없으면 hour 사용
     if run_at <= datetime.now(UTC):
         return
 

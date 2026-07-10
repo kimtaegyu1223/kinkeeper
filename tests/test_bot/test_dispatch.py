@@ -5,14 +5,16 @@ scheduler는 shared.db.get_session(전역 엔진)을 쓰므로, 테스트 컨테
 """
 
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.orm import sessionmaker
 
 import bot.scheduler as sched
+from shared.config import settings
 from shared.enums import NotificationStatus
-from shared.models import ScheduledNotification
+from shared.models import FamilyMember, ScheduledNotification, WeightLog
 
 
 @pytest.fixture
@@ -238,6 +240,45 @@ async def test_dispatch_sends_resolved_bmi(scheduler_db, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 # #34 스케줄러 misfire_grace_time 설정
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# #31 _has_weight_log_this_week 주 경계를 KST로 계산
+# ---------------------------------------------------------------------------
+
+
+def test_has_weight_log_uses_kst_week_boundary(scheduler_db) -> None:
+    """KST 월요일 새벽(UTC 일요일) 기록도 '이번 주'로 잡혀야 한다 (audit #31)."""
+    tz = ZoneInfo(settings.tz)
+    monday = date(2026, 7, 6)  # 월요일
+
+    with scheduler_db() as s:
+        member = FamilyMember(name="새벽측정", telegram_user_id=7001, height_cm=170)
+        s.add(member)
+        s.commit()
+        mid = member.id
+        # KST 월요일 00:30 기록 = UTC 일요일 15:30. UTC 주 경계로는 '지난주'지만
+        # KST 주 경계로는 이번 주에 속한다.
+        this_week = datetime(2026, 7, 6, 0, 30, tzinfo=tz).astimezone(UTC)
+        # KST 일요일 23:00(= UTC 14:00)은 직전 주라 잡히면 안 된다.
+        prev_week = datetime(2026, 7, 5, 23, 0, tzinfo=tz).astimezone(UTC)
+        s.add(WeightLog(member_id=mid, weight_kg=60.0, recorded_at=prev_week))
+        s.commit()
+
+    try:
+        # 직전 주 기록만 있을 때는 False.
+        assert sched._has_weight_log_this_week(mid, _today=monday) is False
+
+        with scheduler_db() as s:
+            s.add(WeightLog(member_id=mid, weight_kg=61.0, recorded_at=this_week))
+            s.commit()
+
+        assert sched._has_weight_log_this_week(mid, _today=monday) is True
+    finally:
+        with scheduler_db() as s:
+            s.query(WeightLog).filter(WeightLog.member_id == mid).delete()
+            s.query(FamilyMember).filter(FamilyMember.id == mid).delete()
+            s.commit()
 
 
 def test_create_scheduler_sets_misfire_grace_time() -> None:

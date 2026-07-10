@@ -139,6 +139,43 @@ def test_once_custom_escapes_message(db_session):
         assert msg == "병원 예약 &lt;오후 3시&gt; &amp; 검사"
 
 
+def test_once_custom_naive_run_at_interpreted_as_local_tz(db_session):
+    """datetime-local이 보내는 naive 벽시계는 settings.tz(KST)로 해석해야 한다 (audit #6).
+
+    naive를 UTC로 간주하면 KST 기준 9시간 늦게 예약된다.
+    """
+    from datetime import date, datetime, timedelta
+
+    # 폼이 보내는 형식(타임존 없는 로컬 문자열). 충분히 미래로 잡아 과거 컷을 피한다.
+    run_at_local = datetime.combine(date.today() + timedelta(days=3), datetime.min.time()).replace(
+        hour=9
+    )
+    rule = ReminderRule(
+        type=ReminderType.custom,
+        title="병원 예약",
+        lead_times_days=[0],
+        config={"message": "병원 예약", "run_at": run_at_local.isoformat()},
+        active=True,
+    )
+    db_session.add(rule)
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    notifications = (
+        db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .all()
+    )
+    assert notifications
+    for n in notifications:
+        local = n.scheduled_at.astimezone(ZoneInfo(settings.tz))
+        # 입력한 KST 벽시계(9시)와 정확히 일치해야 한다 (UTC 오해석이면 18시가 됨).
+        assert local.hour == 9
+        assert local.replace(tzinfo=None) == run_at_local
+
+
 def test_yearly_custom_escapes_message_once(db_session):
     """yearly 경로는 escape를 한 번만 적용해야 한다 (이중 escape 회귀)."""
     event_date = date.today() + timedelta(days=20)

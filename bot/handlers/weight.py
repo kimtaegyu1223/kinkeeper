@@ -83,23 +83,29 @@ async def weight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # 이번 주 남은 nudge 취소
     from datetime import timedelta
+    from zoneinfo import ZoneInfo
 
+    from shared.config import settings
     from shared.enums import NotificationStatus
     from shared.models import ScheduledNotification
 
-    today = datetime.now(UTC).date()
+    # 주 경계는 서비스 타임존(KST) 기준으로 계산한다. nudge는 diet_report에서 KST
+    # 로컬 날짜로 예약되므로, UTC로 창을 잡으면 KST 월요일 아침 기록 시 이번 주
+    # nudge가 창 밖으로 빠져 취소되지 않는다 (audit #32).
+    tz = ZoneInfo(settings.tz)
+    today = datetime.now(tz).date()
     monday = today - timedelta(days=today.weekday())
     sunday = monday + timedelta(days=6)
+    week_start = datetime(monday.year, monday.month, monday.day, tzinfo=tz).astimezone(UTC)
+    week_end = datetime(sunday.year, sunday.month, sunday.day, 23, 59, tzinfo=tz).astimezone(UTC)
 
     with get_session() as cancel_session:
         pending_nudges = cancel_session.scalars(
             select(ScheduledNotification).where(
                 ScheduledNotification.source_key.like(f"diet:nudge:{member_id}:%"),
                 ScheduledNotification.status == NotificationStatus.pending,
-                ScheduledNotification.scheduled_at
-                >= datetime(monday.year, monday.month, monday.day, tzinfo=UTC),
-                ScheduledNotification.scheduled_at
-                <= datetime(sunday.year, sunday.month, sunday.day, 23, 59, tzinfo=UTC),
+                ScheduledNotification.scheduled_at >= week_start,
+                ScheduledNotification.scheduled_at <= week_end,
             )
         ).all()
         for n in pending_nudges:

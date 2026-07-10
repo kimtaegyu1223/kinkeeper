@@ -1,6 +1,7 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -81,13 +82,20 @@ def _cancel_pending_diet_notifications(session: Session) -> int:
     return len(rows)
 
 
-def _has_weight_log_this_week(member_id: int) -> bool:
-    """이번 주(월~일) 몸무게 기록이 있는지 확인."""
+def _has_weight_log_this_week(member_id: int, _today: date | None = None) -> bool:
+    """이번 주(월~일) 몸무게 기록이 있는지 확인.
+
+    _today: 테스트용 KST 날짜 주입 (None이면 오늘 사용).
+    """
     from shared.models import WeightLog
 
-    today = datetime.now(UTC).date()
-    monday = today - __import__("datetime").timedelta(days=today.weekday())
-    week_start = datetime(monday.year, monday.month, monday.day, tzinfo=UTC)
+    # 주 경계는 서비스 타임존(KST) 기준으로 계산한다. UTC로 계산하면 KST 월요일
+    # 00:00~08:59 기록(UTC 일요일)이 '지난주'로 분류돼 일주일 내내 헛 nudge가
+    # 발송된다 (audit #31). nudge 생성(diet_report)도 KST 주 경계를 쓴다.
+    tz = ZoneInfo(settings.tz)
+    today = _today or datetime.now(tz).date()
+    monday = today - timedelta(days=today.weekday())
+    week_start = datetime(monday.year, monday.month, monday.day, tzinfo=tz).astimezone(UTC)
     with get_session() as session:
         result = session.scalar(
             select(WeightLog).where(
