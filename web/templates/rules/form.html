@@ -12,8 +12,6 @@
       <option value="">선택하세요</option>
       <option value="birthday"     {{ "selected" if rule and rule.type.value == "birthday" }}>🎂 생일</option>
       <option value="holiday"      {{ "selected" if rule and rule.type.value == "holiday" }}>🎊 명절</option>
-      <option value="health_check" {{ "selected" if rule and rule.type.value == "health_check" }}>🏥 건강검진</option>
-      <option value="diet_report"  {{ "selected" if rule and rule.type.value == "diet_report" }}>⚖️ 다이어트 리포트</option>
       <option value="custom"       {{ "selected" if rule and rule.type.value == "custom" }}>📅 커스텀</option>
     </select>
   </label>
@@ -113,81 +111,8 @@
     </fieldset>
   </div>
 
-  {# ── 건강검진 ── #}
-  <div id="section-health_check" class="type-section" style="display:none">
-    <fieldset>
-      <legend>🏥 건강검진 알림 설정</legend>
-      <label>
-        대상 구성원
-        <select name="health_member_id">
-          <option value="">선택하세요</option>
-          {% for m in members %}
-          <option value="{{ m.id }}"
-            {{ "selected" if rule and rule.config.get('member_id') == m.id }}>
-            {{ m.name }}
-          </option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        주기
-        <select name="health_period">
-          <option value="yearly"   {{ "selected" if rule and rule.config.get('period') == 'yearly' }}>매년</option>
-          <option value="biannual" {{ "selected" if rule and rule.config.get('period') == 'biannual' }}>반기(6개월)</option>
-        </select>
-      </label>
-      <label>
-        기준 날짜 (가장 최근 검진일)
-        <input type="date" name="health_anchor_date"
-               value="{{ rule.config.get('anchor_date', '') if rule and rule.type.value == 'health_check' else '' }}" />
-        <small>이 날짜로부터 주기만큼 후에 알림을 보냅니다.</small>
-      </label>
-      <label>
-        알림 시각
-        <input type="number" name="health_hour" min="0" max="23"
-               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'health_check' else 9 }}" />
-        <small>시 (0~23, 기본 9시)</small>
-      </label>
-      <label>
-        며칠 전에 알릴지
-        <input name="health_lead_times"
-               value="{{ rule.lead_times_days | join(', ') if rule and rule.type.value == 'health_check' else '30, 7' }}"
-               placeholder="예: 30, 7" />
-      </label>
-    </fieldset>
-  </div>
-
-  {# ── 다이어트 리포트 ── #}
-  <div id="section-diet_report" class="type-section" style="display:none">
-    <fieldset>
-      <legend>⚖️ 다이어트 리포트 설정</legend>
-      <label>
-        발송 주기
-        <select name="diet_cadence">
-          <option value="weekly"  {{ "selected" if rule and rule.config.get('cadence') == 'weekly' }}>매주</option>
-          <option value="monthly" {{ "selected" if rule and rule.config.get('cadence') == 'monthly' }}>매월</option>
-        </select>
-      </label>
-      <label>
-        요일 (매주인 경우)
-        <select name="diet_weekday">
-          {% set days = ['월', '화', '수', '목', '금', '토', '일'] %}
-          {% for dn in days %}
-          <option value="{{ loop.index0 }}"
-            {{ "selected" if rule and rule.config.get('weekday', 0) == loop.index0 }}>
-            {{ dn }}요일
-          </option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        발송 시각
-        <input type="number" name="diet_hour" min="0" max="23"
-               value="{{ rule.config.get('hour', 9) if rule and rule.type.value == 'diet_report' else 9 }}" />
-        <small>시 (0~23, 기본 9시)</small>
-      </label>
-    </fieldset>
-  </div>
+  {# 건강검진·다이어트 리포트는 규칙이 아니라 전용 생성기가 자동 발송하므로 폼에서
+     제외한다. 유형 select에도 노출하지 않으며 서버에서도 저장을 거부한다 (audit #22). #}
 
   {# ── 커스텀 ── #}
   <div id="section-custom" class="type-section" style="display:none">

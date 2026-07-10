@@ -143,11 +143,16 @@ def _collect_report_items(session: Session, today: date) -> list[_HealthReportIt
             if ct.min_age is not None:
                 if not member.birthday_solar and not member.birthday_lunar:
                     continue  # 생일 모르면 스킵
-                bday = member.birthday_solar or member.birthday_lunar
-                assert bday is not None
-                age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
-                if age < ct.min_age:
-                    continue
+                # 음력 생일은 연도가 센티널(2000)이라 출생연도 의미가 없다. 양력 생일이
+                # 있을 때만 나이를 계산해 필터하고, 음력만 있으면 나이 미상으로 보아
+                # 보수적으로 포함한다(알림 누락보다 과다가 안전) (audit #17).
+                if member.birthday_solar is not None:
+                    bday = member.birthday_solar
+                    age = (
+                        today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                    )
+                    if age < ct.min_age:
+                        continue
 
             config = session.scalar(
                 select(MemberHealthCheckConfig).where(

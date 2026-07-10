@@ -46,9 +46,24 @@ def _get_health_status(member_id: int) -> str:
         lines = [f"📋 <b>{escape(member.name)}</b>님 건강검진 현황\n"]
 
         for ct in check_types:
-            # 성별 필터
-            if ct.gender and member.gender != ct.gender:
+            # 성별·나이 필터는 월간 리포트 generator(_collect_report_items)와 동일해야
+            # 두 화면이 같은 데이터에 같은 항목 목록을 보여준다 (audit #66).
+            # 성별: member.gender 미설정(None)이면 성별 지정 항목도 포함한다.
+            if ct.gender and member.gender and member.gender != ct.gender:
                 continue
+
+            # 나이 제한: 음력 생일은 센티널 연도라 나이 계산에서 제외하고, 양력 생일이
+            # 있을 때만 필터한다(음력만 있으면 나이 미상으로 보아 포함) (audit #17, #66).
+            if ct.min_age is not None:
+                if not member.birthday_solar and not member.birthday_lunar:
+                    continue
+                if member.birthday_solar is not None:
+                    bday = member.birthday_solar
+                    age = (
+                        today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                    )
+                    if age < ct.min_age:
+                        continue
 
             ct_name = escape(ct.name)
 
@@ -109,6 +124,11 @@ def _get_health_status(member_id: int) -> str:
 
 def _record_check(member_id: int, check_name: str, checked_at: date) -> str:
     """검진 기록 저장. 결과 메시지 반환."""
+    # 미래 날짜(예: 연도 오타 2062)는 최신 기록이 되어 next_due를 수십 년 밀어
+    # 검진 알림을 장기간 억제한다. 오늘 이후 날짜는 거부한다 (audit #64).
+    if checked_at > datetime.now(UTC).date():
+        return "미래 날짜는 기록할 수 없습니다. 오늘 이전 날짜로 다시 입력해주세요."
+
     with get_session() as session:
         ct = session.scalar(select(HealthCheckType).where(HealthCheckType.name == check_name))
         if ct is None:

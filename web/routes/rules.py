@@ -33,7 +33,14 @@ def _hour(form: dict[str, str], key: str) -> int:
     return require_range(parse_int_default(form.get(key), "알림 시각", 9), "알림 시각", 0, 23)
 
 
-def _build_config_and_leads(  # noqa: PLR0912
+# 규칙 폼으로 만들 수 없는 유형. 건강검진·다이어트 리포트 알림은 규칙과 무관하게
+# 전용 생성기(rebuild_health_checks/rebuild_diet_reports)가 자동 생성하며, _REGISTRY에
+# 대응 생성기가 없어 규칙으로 저장해도 조용히 무동작한다(유령 UI). 저장을 거부한다.
+# 기존 DB에 이 유형의 규칙이 남아 있어도 로드는 되지만 생성기 없이 무시된다 (audit #22).
+_UNSUPPORTED_RULE_TYPES = {ReminderType.health_check, ReminderType.diet_report}
+
+
+def _build_config_and_leads(
     rule_type: str,
     form: dict[str, str],
 ) -> tuple[dict[str, object], list[int]]:
@@ -57,21 +64,6 @@ def _build_config_and_leads(  # noqa: PLR0912
         )
         config["hour"] = _hour(form, "holiday_hour")
         leads = _parse_int_list(form.get("holiday_lead_times") or "30,7,2,0")
-
-    elif rule_type == "health_check":
-        config["member_id"] = parse_int_default(form.get("health_member_id"), "대상 구성원", 0)
-        config["period"] = form.get("health_period") or "yearly"
-        config["anchor_date"] = form.get("health_anchor_date") or ""
-        config["hour"] = _hour(form, "health_hour")
-        leads = _parse_int_list(form.get("health_lead_times") or "30,7")
-
-    elif rule_type == "diet_report":
-        config["cadence"] = form.get("diet_cadence") or "weekly"
-        config["weekday"] = require_range(
-            parse_int_default(form.get("diet_weekday"), "요일", 0), "요일", 0, 6
-        )
-        config["hour"] = _hour(form, "diet_hour")
-        leads = []
 
     elif rule_type == "custom":
         repeat = form.get("custom_repeat") or "once"
@@ -98,9 +90,16 @@ def _build_config_and_leads(  # noqa: PLR0912
 def _parse_rule_type(rule_type: str) -> ReminderType:
     """폼 type 값을 ReminderType으로 변환. 알 수 없는 값은 500 대신 400 (audit #59)."""
     try:
-        return ReminderType(rule_type)
+        parsed = ReminderType(rule_type)
     except ValueError:
         raise HTTPException(status_code=400, detail="알 수 없는 규칙 유형입니다.") from None
+    # 규칙으로 설정 불가한 유형(건강검진·다이어트)은 저장을 거부한다 (audit #22).
+    if parsed in _UNSUPPORTED_RULE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="건강검진·다이어트 리포트는 규칙으로 설정하지 않습니다(자동 발송됩니다).",
+        )
+    return parsed
 
 
 def _validate_rule_target(rule_type: str, config: dict[str, object]) -> None:

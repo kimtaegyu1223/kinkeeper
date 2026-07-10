@@ -358,3 +358,34 @@ def test_csrf_same_origin_post_allowed(client) -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 200
+
+
+def test_health_check_rule_type_rejected(client) -> None:
+    """건강검진은 규칙으로 저장할 수 없다(전용 생성기가 자동 발송) — 400, 미저장 (audit #22)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/rules/new",
+        data={
+            "type": "health_check",
+            "title": "건강검진 규칙",
+            "health_member_id": "1",
+            "health_anchor_date": "2026-01-10",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(ReminderRule).count() == 0
+
+
+def test_diet_report_rule_type_rejected(client) -> None:
+    """다이어트 리포트도 규칙으로 저장할 수 없다 — 400, 미저장 (audit #22)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/rules/new",
+        data={"type": "diet_report", "title": "다이어트 규칙", "diet_cadence": "weekly"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(ReminderRule).count() == 0

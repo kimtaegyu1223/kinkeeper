@@ -247,3 +247,19 @@ def test_birthday_escapes_name_with_html_chars(rule, member, db_session) -> None
         # 원문 '<3'가 그대로 남으면 안 된다 (의도된 <b> 마크업은 유지)
         assert "엄마<3" not in msg
         assert "<b>" in msg
+
+
+def test_birthday_skips_inactive_member(rule, member, db_session) -> None:
+    """비활성 구성원의 생일 알림은 규칙이 활성이어도 생성되지 않는다 (audit #57)."""
+    member.active = False
+    db_session.flush()
+
+    generate(rule, db_session, horizon_days=60)
+    db_session.flush()
+
+    count = (
+        db_session.query(ScheduledNotification)
+        .filter(ScheduledNotification.rule_id == rule.id)
+        .count()
+    )
+    assert count == 0

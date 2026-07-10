@@ -57,9 +57,10 @@ def _ensure_birthday_rule(session: object, member: FamilyMember) -> ReminderRule
         )
     )
 
-    # 생일 정보가 모두 비면 기존 생일 규칙을 비활성화한다. 반환된 규칙을 caller가
-    # rebuild_for_rule에 넘기면 내부에서 pending 알림까지 취소된다 (audit #43).
-    if not member.birthday_solar and not member.birthday_lunar:
+    # 비활성 구성원 또는 생일 정보가 모두 빈 경우 기존 생일 규칙을 비활성화한다. 반환된
+    # 규칙을 caller가 rebuild_for_rule에 넘기면 내부에서 pending 알림까지 취소된다
+    # (audit #43, #57).
+    if not member.active or (not member.birthday_solar and not member.birthday_lunar):
         if existing and existing.active:
             existing.active = False
         return existing

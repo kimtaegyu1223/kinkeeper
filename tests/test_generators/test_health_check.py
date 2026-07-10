@@ -406,3 +406,30 @@ def test_first_of_next_month_december():
 
 def test_first_of_next_month_end_of_month():
     assert _first_of_next_month(date(2024, 1, 31)) == date(2024, 2, 1)
+
+
+# ---------------------------------------------------------------------------
+# 12. 음력 전용 생일 + min_age (audit #17)
+# ---------------------------------------------------------------------------
+
+
+def test_min_age_includes_lunar_only_member(db_session):
+    """음력 생일만 있는 구성원은 센티널 연도(2000)로 나이를 오판하지 않고,
+    나이 미상으로 보아 min_age 검진에 보수적으로 포함된다 (audit #17)."""
+    # 음력 3/15만 등록(연도는 2000 센티널). 실제로는 고령이지만 birthday_solar 없음.
+    lunar_senior = FamilyMember(
+        name="음력조부",
+        telegram_user_id=77777,
+        birthday_lunar=date(2000, 3, 15),
+        active=True,
+    )
+    ct = HealthCheckType(name="대장내시경", period_years=5, min_age=50, active=True)
+    db_session.add_all([lunar_senior, ct])
+    db_session.flush()
+
+    _rebuild(db_session)
+
+    reports = _monthly_reports(_all_notifs(db_session))
+    assert reports, "음력 전용 구성원이 min_age 검진에서 누락됨"
+    assert any("대장내시경" in (r.message or "") for r in reports)
+    assert any("음력조부" in (r.message or "") for r in reports)
