@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from shared.db import get_session
 from shared.enums import ReminderType
-from shared.generators import rebuild_for_rule
+from shared.generators import _REGISTRY, rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
 from web.auth import verify_admin
 from web.form_utils import parse_int_default, require_range, validate_iso_datetime
@@ -31,13 +31,6 @@ def _parse_int_list(raw: str) -> list[int]:
 
 def _hour(form: dict[str, str], key: str) -> int:
     return require_range(parse_int_default(form.get(key), "알림 시각", 9), "알림 시각", 0, 23)
-
-
-# 규칙 폼으로 만들 수 없는 유형. 건강검진·다이어트 리포트 알림은 규칙과 무관하게
-# 전용 생성기(rebuild_health_checks/rebuild_diet_reports)가 자동 생성하며, _REGISTRY에
-# 대응 생성기가 없어 규칙으로 저장해도 조용히 무동작한다(유령 UI). 저장을 거부한다.
-# 기존 DB에 이 유형의 규칙이 남아 있어도 로드는 되지만 생성기 없이 무시된다 (audit #22).
-_UNSUPPORTED_RULE_TYPES = {ReminderType.health_check, ReminderType.diet_report}
 
 
 def _build_config_and_leads(
@@ -93,8 +86,11 @@ def _parse_rule_type(rule_type: str) -> ReminderType:
         parsed = ReminderType(rule_type)
     except ValueError:
         raise HTTPException(status_code=400, detail="알 수 없는 규칙 유형입니다.") from None
-    # 규칙으로 설정 불가한 유형(건강검진·다이어트)은 저장을 거부한다 (audit #22).
-    if parsed in _UNSUPPORTED_RULE_TYPES:
+    # '규칙 생성 가능 타입'의 단일 출처는 _REGISTRY(등록 생성기가 있는 타입)다.
+    # 건강검진·다이어트 리포트는 _REGISTRY에 없고 전용 생성기
+    # (rebuild_health_checks/rebuild_diet_reports)가 규칙과 무관하게 자동 발송하므로
+    # 규칙으로 저장해도 조용히 무동작한다(유령 UI). 저장을 거부한다 (audit #10/#22).
+    if parsed not in _REGISTRY:
         raise HTTPException(
             status_code=400,
             detail="건강검진·다이어트 리포트는 규칙으로 설정하지 않습니다(자동 발송됩니다).",
