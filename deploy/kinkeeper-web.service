@@ -1,13 +1,14 @@
-# 이 파일은 deploy/install.sh 가 USER와 PROJECT_DIR을 자동으로 교체합니다.
-# 직접 복사해서 쓸 경우 User=, WorkingDirectory=, ExecStart=, EnvironmentFile= 경로를 수정하세요.
+# 이 파일은 systemd --user 유닛입니다. deploy/install.sh 가 PROJECT_DIR을 자동으로 교체해
+# ~/.config/systemd/user/ 에 설치합니다.
+# 직접 복사해서 쓸 경우 WorkingDirectory=, ExecStart=, EnvironmentFile= 경로를 수정하세요.
+# 관리자 웹은 루프백(127.0.0.1)에만 바인딩합니다. 외부 접근은 kinkeeper-web-tailscale 경유.
 [Unit]
 Description=KinKeeper Admin Web
-After=network-online.target docker.service
-Wants=docker.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=__USER__
 WorkingDirectory=__PROJECT_DIR__
 ExecStart=__PROJECT_DIR__/.venv/bin/uvicorn web.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
@@ -15,4 +16,4 @@ RestartSec=5
 EnvironmentFile=__PROJECT_DIR__/.env
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

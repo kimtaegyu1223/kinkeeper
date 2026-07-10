@@ -157,4 +157,9 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_family_members_telegram_user_id"), table_name="family_members")
     op.drop_table("family_members")
     op.drop_table("admin_broadcasts")
+    # 네이티브 enum 타입은 drop_table로 제거되지 않으므로 명시적으로 삭제한다.
+    # 이게 없으면 downgrade base 후 재차 upgrade head 시 CREATE TYPE이
+    # DuplicateObject('type ... already exists')로 실패한다 (audit #71).
+    sa.Enum(name="notificationstatus").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="remindertype").drop(op.get_bind(), checkfirst=True)
     # ### end Alembic commands ###

@@ -129,7 +129,7 @@ bash deploy/install.sh
 - DB 마이그레이션
 - systemd 서비스 등록 및 시작
 
-설치 완료 후 `http://서버IP:8000` 으로 관리자 웹 접속.
+설치 완료 후 `http://127.0.0.1:8000` 으로 관리자 웹 접속(루프백 전용). 외부 기기에서 접근하려면 SSH 터널이나 tailscale(`kinkeeper-web-tailscale`)을 경유하세요. `--host 0.0.0.0` 으로 바꿔 LAN 전체에 노출하지 마세요.
 
 ---
 
