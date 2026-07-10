@@ -65,3 +65,23 @@ def test_pg_backup_atomic_write() -> None:
     text = (DEPLOY / "pg_backup.sh").read_text()
     assert ".tmp" in text
     assert "mv " in text
+
+
+def test_deploy_stops_before_migrate_and_starts_after() -> None:
+    """파괴적 마이그레이션 대비 deploy.sh는 stop→migrate→start 순서여야 한다.
+
+    restart를 migrate 뒤에 두면 컬럼 드롭 직후~재시작 전까지 구코드가 드롭된 컬럼을
+    조회해 500/스케줄러 예외를 낼 수 있다(expand/contract 위반). 서비스 정지가
+    마이그레이션보다, 마이그레이션이 서비스 시작보다 앞서는지 확인한다.
+    """
+    text = (DEPLOY / "deploy.sh").read_text()
+    stop_at = text.find("systemctl --user stop")
+    migrate_at = text.find("alembic upgrade head")
+    start_at = text.find("systemctl --user start")
+
+    assert stop_at != -1, "서비스 정지 단계가 없음"
+    assert start_at != -1, "서비스 시작 단계가 없음"
+    assert migrate_at != -1, "마이그레이션 단계가 없음"
+    assert stop_at < migrate_at < start_at, "stop→migrate→start 순서가 아님"
+    # restart는 stop→start 창을 없애므로 파괴적 마이그레이션 배포에서 쓰면 안 된다.
+    assert "systemctl --user restart" not in text
