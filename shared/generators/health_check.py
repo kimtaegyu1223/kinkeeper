@@ -7,7 +7,7 @@ rebuild_health_checks() 를 scheduler에서 rebuild_upcoming() 과 함께 호출
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from html import escape
 
 from sqlalchemy import select
@@ -50,28 +50,6 @@ def _next_due(latest_checked: date | None, period_years: int, today: date) -> da
     return _add_years(latest_checked, period_years)
 
 
-def _upsert_health_notification(
-    session: Session,
-    source_key: str,
-    scheduled_at: datetime,
-    target_telegram_id: int,
-    message: str,
-) -> None:
-    existing = session.scalar(
-        select(ScheduledNotification).where(
-            ScheduledNotification.source_key == source_key,
-            ScheduledNotification.status == NotificationStatus.pending,
-        )
-    )
-    if existing:
-        existing.scheduled_at = scheduled_at
-        existing.target_telegram_id = target_telegram_id
-        existing.message = message
-        return
-
-    upsert_notification_by_key(session, source_key, scheduled_at, target_telegram_id, message)
-
-
 def _cancel_stale_health_notifications(session: Session, desired_source_keys: set[str]) -> None:
     rows = session.scalars(
         select(ScheduledNotification).where(
@@ -104,7 +82,7 @@ def rebuild_health_checks(
         if month_items:
             source_key = f"hc:monthly:group:{report_date.isoformat()}"
             desired_source_keys.add(source_key)
-            _upsert_health_notification(
+            upsert_notification_by_key(
                 session,
                 source_key,
                 scheduled_at_local(report_date),
