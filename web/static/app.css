@@ -370,6 +370,11 @@ a.list-row {
   color: var(--primary);
 }
 
+.badge--warn {
+  background: rgba(255, 149, 0, 0.12);
+  color: #d97a00;
+}
+
 /* D-day 뱃지 */
 .badge--dday {
   background: var(--primary);
@@ -671,6 +676,89 @@ fieldset.form-group > legend {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── 검진 현황 카드 ─────────────────────────────────────── */
+.check__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.check__name {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.check__meta {
+  margin-top: 4px;
+  font-size: var(--fs-sub);
+  color: var(--text-sub);
+}
+
+.check__due {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+  font-size: var(--fs-sub);
+}
+
+.check__due-date {
+  font-weight: 700;
+  font-size: var(--fs-body);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 접이식 개인 설정 */
+.disclosure {
+  margin-top: 12px;
+}
+
+.disclosure > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure__body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.is-muted {
+  opacity: 0.55;
+}
+
+/* 인라인 폼(기록 추가·개인 설정) */
+.form--inline {
+  gap: 12px;
+}
+
+/* 코드 표기 (안내문 내 예시) */
+code {
+  padding: 1px 5px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 /* ── 결과 알림 배너 ─────────────────────────────────────── */

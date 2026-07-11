@@ -1,84 +1,75 @@
 {% extends "base.html" %}
-{% block title %}건강검진 관리 — KinKeeper{% endblock %}
+{% block title %}건강검진 — KinKeeper{% endblock %}
 {% block content %}
-
-<hgroup>
-  <h2>건강검진 관리</h2>
-  <p>검진 항목을 설정하고 구성원별 기록을 확인하세요.</p>
-</hgroup>
-
-<article>
-  <header>
-    <div style="display:flex; justify-content:space-between; align-items:center">
-      <h3 style="margin:0">검진 항목</h3>
-      <a href="/health/types/new" role="button">+ 항목 추가</a>
-    </div>
-  </header>
-
-  <table>
-    <thead>
-      <tr>
-        <th>항목명</th>
-        <th>주기</th>
-        <th>대상 성별</th>
-        <th>n세 이상</th>
-        <th>상태</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for ct in types %}
-      <tr>
-        <td>{{ ct.name }}</td>
-        <td>{{ ct.period_years }}년마다</td>
-        <td>{{ {"M": "남성", "F": "여성"}.get(ct.gender, "모두") }}</td>
-        <td>{{ ct.min_age ~ "세" if ct.min_age is not none else "없음" }}</td>
-        <td>
-          {% if ct.active %}
-          <ins>활성</ins>
-          {% else %}
-          <del>비활성</del>
-          {% endif %}
-        </td>
-        <td>
-          <a href="/health/types/{{ ct.id }}/edit" role="button" class="secondary" style="margin-right:0.3rem">수정</a>
-          <a href="#"
-             hx-delete="/health/types/{{ ct.id }}"
-             hx-confirm="삭제하면 모든 검진 기록도 삭제됩니다. 계속하시겠습니까?"
-             hx-target="closest tr" hx-swap="outerHTML"
-             role="button" class="contrast">삭제</a>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="6">
-          <small>등록된 검진 항목이 없습니다. 항목을 먼저 추가하세요.</small>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</article>
-
-<article>
-  <header>
-    <h3 style="margin:0">구성원별 검진 기록</h3>
-  </header>
-
-  {% if members %}
-  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem">
-    {% for m in members %}
-    <article style="margin:0">
-      <header style="padding-bottom:0.5rem">
-        <strong>{{ m.name }}</strong>
-      </header>
-      <a href="/health/records/{{ m.id }}" role="button" class="secondary">검진 기록 보기</a>
-    </article>
-    {% endfor %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">건강검진</h1>
+    <p class="page-subtitle">검진 항목을 설정하고 구성원별 기록을 확인하세요</p>
   </div>
-  {% else %}
-  <p><small>등록된 구성원이 없습니다.</small></p>
-  {% endif %}
-</article>
+  <a class="btn btn--secondary" href="/health/types/new">+ 항목</a>
+</div>
 
+<h2 class="section-title">검진 항목</h2>
+{% if types %}
+<div class="card-list">
+  {% for ct in types %}
+  <div class="list-row">
+    <div class="list-row__main">
+      <div class="list-row__title">
+        {{ ct.name }}
+        {% if ct.active %}
+        <span class="badge badge--active">활성</span>
+        {% else %}
+        <span class="badge badge--inactive">비활성</span>
+        {% endif %}
+      </div>
+      <div class="list-row__meta">
+        {{ ct.period_years }}년마다 ·
+        {{ {"M": "남성", "F": "여성"}.get(ct.gender, "모두") }}
+        {% if ct.min_age is not none %} · {{ ct.min_age }}세 이상{% endif %}
+      </div>
+    </div>
+    <div class="list-row__actions">
+      <a class="btn btn--secondary" href="/health/types/{{ ct.id }}/edit">수정</a>
+      <a class="btn btn--danger" href="#"
+         hx-delete="/health/types/{{ ct.id }}"
+         hx-confirm="삭제하면 모든 검진 기록도 삭제됩니다. 계속하시겠습니까?"
+         hx-target="closest .list-row"
+         hx-swap="outerHTML">삭제</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty">
+    <div class="empty__emoji" aria-hidden="true">🩺</div>
+    <p class="empty__text">등록된 검진 항목이 없습니다. 항목을 먼저 추가하세요.</p>
+    <a class="btn btn--primary" href="/health/types/new">첫 항목 추가</a>
+  </div>
+</div>
+{% endif %}
+
+<h2 class="section-title">구성원별 기록</h2>
+{% if members %}
+<div class="card-list">
+  {% for m in members %}
+  <a class="list-row" href="/health/records/{{ m.id }}">
+    <div class="list-row__main">
+      <div class="list-row__title">{{ m.name }}</div>
+      <div class="list-row__meta">검진 기록 보기</div>
+    </div>
+    <span class="chevron" aria-hidden="true">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty">
+    <div class="empty__emoji" aria-hidden="true">👪</div>
+    <p class="empty__text">등록된 구성원이 없습니다.</p>
+    <a class="btn btn--primary" href="/members/new">가족 추가</a>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -8,21 +8,32 @@ from sqlalchemy import select
 from shared.config import settings
 from shared.db import get_session
 from shared.enums import NotificationStatus
-from shared.models import AdminBroadcast, FamilyMember, ScheduledNotification
+from shared.models import AdminBroadcast, ScheduledNotification
 from web.auth import verify_admin
 from web.templating import templates
 
 router = APIRouter(prefix="/broadcast", dependencies=[Depends(verify_admin)])
 
 
+def _recent_broadcasts(session: object) -> list[AdminBroadcast]:
+    """최근 발송 이력(최신순 10건)."""
+    from sqlalchemy.orm import Session as SASession
+
+    if not isinstance(session, SASession):
+        return []
+    return list(
+        session.scalars(
+            select(AdminBroadcast).order_by(AdminBroadcast.sent_at.desc()).limit(10)
+        ).all()
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 def broadcast_form(request: Request) -> HTMLResponse:
     with get_session() as session:
-        members = session.scalars(
-            select(FamilyMember).where(FamilyMember.active.is_(True)).order_by(FamilyMember.name)
-        ).all()
+        history = _recent_broadcasts(session)
     return templates.TemplateResponse(
-        request, "broadcast.html", {"members": members, "result": None}
+        request, "broadcast.html", {"result": None, "history": history}
     )
 
 
@@ -53,12 +64,11 @@ def send_broadcast(
             sent_at=now,
         )
         session.add(broadcast)
+        session.flush()
 
-        all_members = session.scalars(
-            select(FamilyMember).where(FamilyMember.active.is_(True)).order_by(FamilyMember.name)
-        ).all()
+        history = _recent_broadcasts(session)
 
     result = {"ok": True, "msg": "그룹채널에 발송 예약됐습니다. (1분 내 전송)"}
     return templates.TemplateResponse(
-        request, "broadcast.html", {"members": all_members, "result": result}
+        request, "broadcast.html", {"result": result, "history": history}
     )

@@ -1,18 +1,47 @@
 {% extends "base.html" %}
 {% block title %}공지 보내기 — KinKeeper{% endblock %}
 {% block content %}
-<h2>공지 보내기</h2>
-
-<form method="post">
-  <label>
-    메시지 (그룹채널에 발송됩니다)
-    <textarea name="message" rows="5" required maxlength="4096"></textarea>
-  </label>
-  <button type="submit">보내기</button>
-</form>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">공지 보내기</h1>
+    <p class="page-subtitle">가족 그룹채널로 즉시 발송됩니다</p>
+  </div>
+</div>
 
 {% if result %}
-<hr>
-<p class="{{ 'success' if result.ok else 'danger' }}">{{ result.msg }}</p>
+<div class="notice notice--{{ 'success' if result.ok else 'danger' }}">{{ result.msg }}</div>
+{% endif %}
+
+<form class="form" method="post" style="margin-top:16px">
+  <div class="form-field">
+    <label class="form-label" for="bc-msg">메시지</label>
+    <textarea class="form-textarea" id="bc-msg" name="message" rows="5" required
+              maxlength="4096" placeholder="그룹채널에 보낼 내용을 입력하세요."></textarea>
+    <p class="form-hint">최대 4096자. 발송까지 최대 1분 정도 걸릴 수 있어요.</p>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn--primary btn--block" type="submit">보내기</button>
+  </div>
+</form>
+
+<h2 class="section-title">최근 발송 이력</h2>
+{% if history %}
+<div class="card-list">
+  {% for b in history %}
+  <div class="list-row">
+    <div class="list-row__main">
+      <div class="list-row__title">{{ b.message }}</div>
+      <div class="list-row__meta">{{ b.sent_at.strftime("%Y-%m-%d %H:%M") }} · {{ b.sent_by }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty">
+    <div class="empty__emoji" aria-hidden="true">📢</div>
+    <p class="empty__text">아직 발송한 공지가 없습니다.</p>
+  </div>
+</div>
 {% endif %}
 {% endblock %}
