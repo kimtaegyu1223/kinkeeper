@@ -1,39 +1,49 @@
 {% extends "base.html" %}
-{% block title %}가족 구성원 — KinKeeper{% endblock %}
+{% block title %}가족 — KinKeeper{% endblock %}
 {% block content %}
-<h2>가족 구성원</h2>
-<a href="/members/new" role="button">+ 추가</a>
+<div class="page-head">
+  <h1 class="page-title">가족</h1>
+  <a class="btn btn--secondary" href="/members/new">+ 추가</a>
+</div>
 
-<table>
-  <thead>
-    <tr>
-      <th>이름</th><th>텔레그램 ID</th><th>생일</th><th>상태</th><th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for m in members %}
-    <tr>
-      <td>{{ m.name }}</td>
-      <td>{{ m.telegram_user_id or "—" }}</td>
-      <td>
-        {%- if m.birthday_solar %}{{ m.birthday_solar.strftime("%m/%d") }} (양력)
-        {%- elif m.birthday_lunar %}{{ m.birthday_lunar.strftime("%m/%d") }} (음력)
-        {%- else %}—{%- endif %}
-      </td>
-      <td>{{ "활성" if m.active else "비활성" }}</td>
-      <td>
-        <a href="/members/{{ m.id }}/edit">수정</a> |
-        <a href="#"
-           hx-delete="/members/{{ m.id }}"
-           hx-confirm="정말 삭제하시겠습니까?"
-           hx-target="closest tr"
-           hx-swap="outerHTML"
-           class="danger">삭제</a>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="5">등록된 구성원이 없습니다.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% if members %}
+<div class="card-list">
+  {% for m in members %}
+  <div class="list-row">
+    <div class="list-row__main">
+      <div class="list-row__title">
+        {{ m.name }}
+        {% if m.active %}
+        <span class="badge badge--active">활성</span>
+        {% else %}
+        <span class="badge badge--inactive">비활성</span>
+        {% endif %}
+      </div>
+      <div class="list-row__meta">
+        {%- if m.birthday_solar %}🎂 {{ m.birthday_solar.strftime("%m/%d") }} (양력)
+        {%- elif m.birthday_lunar %}🎂 {{ m.birthday_lunar.month }}/{{ m.birthday_lunar.day }} (음력)
+        {%- else %}생일 미등록{%- endif %}
+        {% if m.telegram_user_id %} · ID {{ m.telegram_user_id }}{% endif %}
+      </div>
+    </div>
+    <div class="list-row__actions">
+      <a class="btn btn--secondary" href="/members/{{ m.id }}/edit">수정</a>
+      <a class="btn btn--danger" href="#"
+         hx-delete="/members/{{ m.id }}"
+         hx-confirm="정말 삭제하시겠습니까?"
+         hx-target="closest .list-row"
+         hx-swap="outerHTML">삭제</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty">
+    <div class="empty__emoji" aria-hidden="true">👪</div>
+    <p class="empty__text">아직 등록된 가족이 없습니다.</p>
+    <a class="btn btn--primary" href="/members/new">첫 구성원 추가</a>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -1,70 +1,87 @@
 {% extends "base.html" %}
-{% block title %}{{ "구성원 수정" if member else "구성원 추가" }} — KinKeeper{% endblock %}
+{% block title %}{{ "가족 수정" if member else "가족 추가" }} — KinKeeper{% endblock %}
 {% block content %}
-<h2>{{ "구성원 수정" if member else "구성원 추가" }}</h2>
+<div class="page-head">
+  <h1 class="page-title">{{ "가족 수정" if member else "가족 추가" }}</h1>
+</div>
 
-<form method="post">
-  <label>
-    이름
-    <input name="name" value="{{ member.name if member else '' }}" required maxlength="50" />
-  </label>
-  <label>
-    텔레그램 사용자 ID
-    <input name="telegram_user_id" type="number"
+<form class="form" method="post">
+  <div class="form-field">
+    <label class="form-label" for="f-name">이름</label>
+    <input class="form-input" id="f-name" name="name"
+           value="{{ member.name if member else '' }}" required maxlength="50"
+           placeholder="예: 홍길동" />
+  </div>
+
+  <div class="form-field">
+    <label class="form-label" for="f-tg">텔레그램 사용자 ID</label>
+    <input class="form-input" id="f-tg" name="telegram_user_id" type="number"
            value="{{ member.telegram_user_id if member and member.telegram_user_id else '' }}"
            placeholder="없으면 비워두세요" />
-    <small>봇 DM에서 /start 보내면 확인 가능. 또는 @userinfobot 에게 DM.</small>
-  </label>
+    <p class="form-hint">봇 DM에서 /start 를 보내면 확인할 수 있어요. 또는 @userinfobot 에게 DM.</p>
+  </div>
 
-  <fieldset>
+  <fieldset class="form-group">
     <legend>생일</legend>
-    <label>
-      양력 생일
-      <input name="birthday_solar" type="date"
+
+    <div class="form-field">
+      <label class="form-label" for="f-solar">양력 생일</label>
+      <input class="form-input" id="f-solar" name="birthday_solar" type="date"
              value="{{ member.birthday_solar.isoformat() if member and member.birthday_solar else '' }}" />
-    </label>
-    <label>
-      음력 생일 (월)
-      <select name="birthday_lunar_month">
-        <option value="">—</option>
-        {% for m in range(1, 13) %}
-        <option value="{{ m }}"
-          {{ "selected" if member and member.birthday_lunar and member.birthday_lunar.month == m }}>
-          {{ m }}월
-        </option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>
-      음력 생일 (일)
-      <select name="birthday_lunar_day">
-        <option value="">—</option>
-        {% for d in range(1, 31) %}
-        <option value="{{ d }}"
-          {{ "selected" if member and member.birthday_lunar and member.birthday_lunar.day == d }}>
-          {{ d }}일
-        </option>
-        {% endfor %}
-      </select>
-    </label>
-    <small>양력과 음력 중 하나만 입력해도 됩니다. 둘 다 있으면 생일 알림에서 선택 가능합니다.</small>
+    </div>
+
+    <div class="field-row">
+      <div class="form-field">
+        <label class="form-label" for="f-lunar-m">음력 생일 (월)</label>
+        <select class="form-select" id="f-lunar-m" name="birthday_lunar_month">
+          <option value="">선택 안 함</option>
+          {% for m in range(1, 13) %}
+          <option value="{{ m }}"
+            {{ "selected" if member and member.birthday_lunar and member.birthday_lunar.month == m }}>
+            {{ m }}월
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="f-lunar-d">음력 생일 (일)</label>
+        <select class="form-select" id="f-lunar-d" name="birthday_lunar_day">
+          <option value="">선택 안 함</option>
+          {% for d in range(1, 31) %}
+          <option value="{{ d }}"
+            {{ "selected" if member and member.birthday_lunar and member.birthday_lunar.day == d }}>
+            {{ d }}일
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <p class="form-hint">
+      양력·음력 중 <b>하나만</b> 입력해도 됩니다. 음력은 월·일을 모두 선택하세요.
+      둘 다 입력하면 생일 알림 규칙에서 기준을 고를 수 있어요.
+    </p>
   </fieldset>
 
-  <label>
-    성별
-    <select name="gender">
+  <div class="form-field">
+    <label class="form-label" for="f-gender">성별</label>
+    <select class="form-select" id="f-gender" name="gender">
       <option value=""  {{ "selected" if not member or not member.gender }}>미설정</option>
       <option value="M" {{ "selected" if member and member.gender == 'M' }}>남성</option>
       <option value="F" {{ "selected" if member and member.gender == 'F' }}>여성</option>
     </select>
-    <small>여성 전용 검진 항목(유방초음파 등) 필터링에 사용됩니다.</small>
-  </label>
-  <label>
-    활성
-    <input name="active" type="checkbox"
+    <p class="form-hint">여성 전용 검진 항목(유방초음파 등) 필터링에 사용됩니다.</p>
+  </div>
+
+  <div class="form-check">
+    <label class="form-check__label" for="f-active">활성</label>
+    <input id="f-active" name="active" type="checkbox"
            {{ "checked" if not member or member.active else "" }} />
-  </label>
-  <button type="submit">저장</button>
-  <a href="/members" role="button" class="secondary">취소</a>
+  </div>
+
+  <div class="form-actions">
+    <a class="btn btn--secondary" href="/members" style="height:48px">취소</a>
+    <button class="btn btn--primary" type="submit">저장</button>
+  </div>
 </form>
 {% endblock %}
