@@ -95,7 +95,7 @@
 | `ADMIN_PASSWORD_HASH` | (빈 값) | | 관리자 웹 비밀번호의 bcrypt 해시 |
 | `TZ` | `Asia/Seoul` | | 모든 시각 계산 기준 시간대. 유효한 zoneinfo 이름이 아니면 시작 시 중단 |
 | `LOG_LEVEL` | `INFO` | | 로그 레벨 |
-| `SCHEDULE_HORIZON_DAYS` | `365` | | 예약 알림을 몇 일 앞까지 미리 생성할지 (`.env`로 조정) |
+| `SCHEDULE_HORIZON_DAYS` | `90` | | 예약 알림을 몇 일 앞까지 미리 생성할지 (`.env`로 조정) |
 | `WEIGHT_FEATURE_ENABLED` | `false` | | 다이어트/몸무게 기능 on/off |
 
 > **시작 시 검증**(`Settings.validate_runtime`): 봇·웹 프로세스는 시작할 때
