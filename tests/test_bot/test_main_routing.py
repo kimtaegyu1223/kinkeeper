@@ -93,6 +93,9 @@ def capture_log(monkeypatch):
         def exception(self, *a, **k):
             pass
 
+        def error(self, event, **kw):
+            records.append({"event": event, **kw})
+
     monkeypatch.setattr(botmain, "log", _FakeLog())
     return records
 
@@ -145,3 +148,56 @@ async def test_startup_rebuild_succeeds_first_try(monkeypatch) -> None:
     monkeypatch.setattr(botmain, "rebuild_upcoming_async", ok)
     await botmain._startup_rebuild(max_attempts=3)
     assert calls["n"] == 1
+
+
+# ---------------------------------------------------------------------------
+# 하드닝: 에러 핸들러 — 예외 타입/요약만 로깅(PII 금지) + 일반 안내 회신
+# ---------------------------------------------------------------------------
+
+
+class _ErrMessage:
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.replies: list[str] = []
+
+    async def reply_text(self, text: str, parse_mode: str | None = None) -> None:
+        if self.fail:
+            raise RuntimeError("회신 실패")
+        self.replies.append(text)
+
+
+async def test_error_handler_logs_type_and_replies(capture_log) -> None:
+    msg = _ErrMessage()
+    update = SimpleNamespace(effective_message=msg, effective_chat=SimpleNamespace(id=77))
+    context = SimpleNamespace(error=ValueError("사용자 원문<b> 유출되면 안 됨"))
+
+    await botmain._on_error(update, context)
+
+    assert capture_log
+    rec = capture_log[-1]
+    assert rec["event"] == "핸들러 처리 중 오류"
+    assert rec["error_type"] == "ValueError"
+    assert rec["chat_id"] == 77
+    # update 본문·이름 등은 별도 필드로 로깅되지 않아야 한다.
+    for forbidden in ("text", "name", "full_name", "message", "update"):
+        assert forbidden not in rec
+    # effective_message가 있으면 일반 안내 1줄 회신
+    assert msg.replies and "다시 시도" in msg.replies[0]
+
+
+async def test_error_handler_swallows_reply_failure(capture_log) -> None:
+    msg = _ErrMessage(fail=True)
+    update = SimpleNamespace(effective_message=msg, effective_chat=None)
+    context = SimpleNamespace(error=RuntimeError("boom"))
+
+    # 회신이 실패해도 예외를 전파하지 않아야 한다.
+    await botmain._on_error(update, context)
+    assert capture_log[-1]["error_type"] == "RuntimeError"
+
+
+async def test_error_handler_handles_non_update_and_no_error(capture_log) -> None:
+    # update가 Update가 아니고 error가 None이어도 안전해야 한다.
+    await botmain._on_error(None, SimpleNamespace(error=None))
+    rec = capture_log[-1]
+    assert rec["error_type"] == "Unknown"
+    assert "chat_id" not in rec

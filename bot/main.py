@@ -1,6 +1,9 @@
 import asyncio
+import contextlib
+import logging
 
 import structlog
+from structlog.typing import Processor
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -70,14 +73,88 @@ async def _startup_rebuild(max_attempts: int = 5) -> None:
             delay = min(delay * 2, 30.0)
 
 
-def main() -> None:
+def _configure_logging() -> None:
+    """structlog와 stdlib logging을 하나의 JSON 파이프라인으로 합친다.
+
+    봇 핸들러는 structlog로 직접 로깅하지만 PTB·APScheduler·httpx는 stdlib logging을
+    쓴다. ProcessorFormatter로 두 경로를 같은 프로세서 체인에 태워, 내부 에러/경고가
+    stderr raw로 새지 않고 기존과 동일한 JSON 형식으로 나가게 한다(journald 정합).
+
+    httpx는 요청 URL(봇 토큰 포함)을 INFO로 남기고 polling의 getUpdates가 이를 매
+    호출 찍으므로, 토큰 유출·로그 폭주를 막기 위해 WARNING으로 낮춘다(notifier의
+    토큰 마스킹과 같은 취지, audit #10).
+    """
+    # structlog·stdlib 양쪽 레코드에 동일하게 적용할 프로세서(기존 timestamp/level 유지).
+    # format_exc_info는 예외 스택이 살아 있는 로깅 시점에 실행돼야 하므로 이 체인에 둔다.
+    shared_processors: list[Processor] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.format_exc_info,
+    ]
+
     structlog.configure(
         processors=[
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.add_log_level,
-            structlog.processors.JSONRenderer(),
-        ]
+            *shared_processors,
+            # 최종 렌더링은 stdlib 핸들러의 ProcessorFormatter에 위임한다.
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
     )
+
+    formatter = structlog.stdlib.ProcessorFormatter(
+        # structlog을 거치지 않은 외부(stdlib) 레코드에만 적용하는 사전 체인.
+        foreign_pre_chain=shared_processors,
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.processors.JSONRenderer(),
+        ],
+    )
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    # 재호출·중복 import로 핸들러가 누적되지 않게 초기화 후 단일 핸들러만 둔다.
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(settings.log_level.upper())
+
+    # 토큰이 담긴 httpx 요청 URL INFO 로그가 매 getUpdates마다 쌓이는 것을 막는다.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """핸들러/PTB 내부 예외 처리기.
+
+    예외 타입명과 메시지 요약만 구조화 로깅한다. update 본문·멤버/사용자 이름·chat
+    내용은 로깅하지 않는다(journald PII 방지 — 이번 하드닝의 핵심 원칙). effective_message가
+    있으면 사용자에게 일반 안내 1줄을 회신하고, 회신 실패는 삼킨다.
+    """
+    err = context.error
+    fields: dict[str, object] = {
+        "error_type": type(err).__name__ if err is not None else "Unknown",
+        "error": str(err)[:200] if err is not None else "",
+    }
+    # chat_id는 내용이 아닌 대리 식별자라 로깅 허용(_handle_korean_command과 동일 관례).
+    chat = getattr(update, "effective_chat", None)
+    if chat is not None:
+        fields["chat_id"] = getattr(chat, "id", None)
+    log.error("핸들러 처리 중 오류", **fields)
+
+    message = getattr(update, "effective_message", None)
+    if message is not None:
+        # 안내 회신마저 실패하면 조용히 삼킨다(2차 예외로 재귀 호출되지 않도록).
+        with contextlib.suppress(Exception):
+            await message.reply_text("요청 처리 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.")
+
+
+def main() -> None:
+    _configure_logging()
 
     # 필수 설정(토큰/그룹ID/tz) 검증 — 누락·오류면 즉시 중단 (audit #19, #75).
     settings.validate_runtime()
@@ -95,6 +172,9 @@ def main() -> None:
             _handle_korean_command,
         )
     )
+    # 핸들러 예외를 삼켜 사용자 무응답이 되거나 PTB 내부 에러가 JSON 파이프라인 밖으로
+    # 새지 않도록 에러 핸들러를 등록한다.
+    app.add_error_handler(_on_error)
 
     async def on_startup(app: Application) -> None:  # type: ignore[type-arg]
         scheduler.start()

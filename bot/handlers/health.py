@@ -167,9 +167,9 @@ def _record_check(member_id: int, check_name: str, checked_at: date) -> str:
                 checked_at=checked_at,
             )
         )
-        log.info(
-            "검진 기록 저장", member_id=member_id, check_type=ct.name, checked_at=str(checked_at)
-        )
+        # 검진종류명(의료정보)·사람 이름은 INFO 로그에 남기지 않는다(journald PII 방지).
+        # 대리 식별자(member_id·check_type_id)만 남긴다.
+        log.info("검진 기록 저장", member_id=member_id, check_type_id=ct.id)
         return f"✅ <b>{escape(ct.name)}</b> 검진 기록 완료! ({checked_at.strftime('%Y-%m-%d')})"
 
 
