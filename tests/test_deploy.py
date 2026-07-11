@@ -115,3 +115,40 @@ def test_healthz_alert_locks_key_behavior() -> None:
     assert "GROUP_CHAT_ID" in text
     assert "COOLDOWN=3600" in text  # 같은 장애당 1시간 쿨다운
     assert "복구됨" in text  # 복구 시 1회 알림
+
+
+def test_failed_alert_exists_and_executable() -> None:
+    """발송 실패 감시 cron 경보 스크립트가 존재하고 실행 권한이 있어야 한다 (2026-07-11 결정)."""
+    script = DEPLOY / "failed_alert.sh"
+    assert script.is_file()
+    assert os.access(script, os.X_OK), "failed_alert.sh에 실행 권한이 없음"
+
+
+def test_failed_alert_syntax_ok() -> None:
+    """bash -n 구문 검사를 통과해야 한다."""
+    result = subprocess.run(
+        ["bash", "-n", str(DEPLOY / "failed_alert.sh")],
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+
+
+def test_failed_alert_locks_key_behavior() -> None:
+    """발송 실패 경보의 핵심 동작(컨테이너 탐색·조회·전송·자격증명·상태 게이팅)을 잠근다."""
+    text = (DEPLOY / "failed_alert.sh").read_text()
+    assert "set -euo pipefail" in text
+    # pg_backup.sh와 동일하게 compose로 db 컨테이너를 탐색(하드코딩 금지).
+    assert "docker compose ps -q db" in text
+    assert "kinkeeper-db-1" not in text
+    # 최근 24시간 내 failed 조회.
+    assert "status='failed'" in text
+    assert "24 hours" in text
+    # 텔레그램 Bot API로 발송 + 자격증명.
+    assert "sendMessage" in text
+    assert "TELEGRAM_BOT_TOKEN" in text
+    assert "GROUP_CHAT_ID" in text
+    # parse_mode 없이 평문 발송(error의 <,& 등 HTML escape 불필요) — API에 parse_mode 인자를 안 보냄.
+    assert "parse_mode=" not in text
+    # 새 실패(id > last_notified_id)일 때만 경보하는 상태 게이팅.
+    assert "LAST_NOTIFIED_ID" in text
+    assert "failed_alert.state" in text

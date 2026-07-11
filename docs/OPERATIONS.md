@@ -82,6 +82,38 @@ bash deploy/healthz_alert.sh
 > 상태파일은 `${XDG_STATE_HOME:-~/.local/state}/kinkeeper/healthz_alert.state`에
 > 저장됩니다. 경보가 반복되면 지우지 말고 원인(웹/DB)을 먼저 확인하세요.
 
+#### 발송 실패 경보 (`deploy/failed_alert.sh`)
+
+텔레그램 발송이 재시도를 소진하거나 영구 4xx로 실패하면 해당 알림이
+`status='failed'`로 남고 사유가 `error` 컬럼에 기록됩니다(자세한 원인 분류는
+[§4 텔레그램 발송 실패](#텔레그램-발송-실패)). 이 실패는 어디에도 능동적으로 알려지지
+않으므로, 이 스크립트가 **최근 24시간 내 `failed` 행**을 주기적으로 조회해
+**아직 경보하지 않은 새 실패가 생겼을 때만** 텔레그램 그룹으로 1건 경보합니다.
+
+- `pg_backup.sh`와 동일하게 `docker compose ps -q db`로 db 컨테이너를 찾아 `psql`로
+  조회합니다(읽기 전용, DB에 쓰지 않음).
+- 상태파일에 마지막으로 경보한 `failed`의 최대 id(`last_notified_id`)를 저장하고,
+  **id가 그보다 큰 새 실패**가 나올 때만 경보합니다. 같은 실패로 반복 경보(스팸)하지
+  않습니다.
+- 경보 본문에는 **건수 + 가장 최근 `error` 앞 80자**가 담깁니다. `parse_mode` 없이
+  평문으로 보내므로 오류 문자열의 `<`, `&` 등을 그대로 실어도 안전합니다.
+- `.env`의 `TELEGRAM_BOT_TOKEN`/`GROUP_CHAT_ID`(발송)와 `POSTGRES_USER`/`POSTGRES_DB`
+  (조회)를 사용합니다. **failed 0건이면 아무것도 보내지 않고 종료**하므로 cron 등록 전
+  수동 1회 실행이 안전합니다.
+
+```bash
+# 수동 1회 (동작 확인 — failed 0건이면 조용히 끝남)
+bash deploy/failed_alert.sh
+
+# 30분마다 자동 (crontab -e)
+*/30 * * * * bash /home/ktg/projects/kinkeeper/deploy/failed_alert.sh
+```
+
+> 상태파일은 `${XDG_STATE_HOME:-~/.local/state}/kinkeeper/failed_alert.state`에
+> 저장됩니다. 경보를 받으면 [§4 텔레그램 발송 실패](#텔레그램-발송-실패)의 조회 쿼리로
+> 실패 목록과 원인을 확인하세요. 상태파일을 지우면 지난 24시간 내 실패를 다시 경보할 수
+> 있습니다.
+
 ---
 
 ## 2. 배포 절차
@@ -220,7 +252,8 @@ gunzip -c ~/backups/kinkeeper/family_notifier_YYYYMMDD_HHMMSS.sql.gz \
 `send_message`(`shared/notifier.py`)는 타임아웃·네트워크 순단·5xx·429를 자동
 재시도합니다(최대 3회, 429는 Retry-After 존중, §ARCHITECTURE 4). 재시도가 소진되거나
 영구 4xx(400 chat not found·403 봇 차단)면 해당 알림이 `failed`가 되고 사유가
-`error` 컬럼에 남습니다.
+`error` 컬럼에 남습니다. 이 실패는 [§1 발송 실패 경보](#발송-실패-경보-deployfailed_alertsh)
+(`deploy/failed_alert.sh`, 30분 cron)가 텔레그램으로 알려 줍니다 — 아래 쿼리로 상세를 봅니다.
 
 ```bash
 CID=$(docker compose ps -q db)
