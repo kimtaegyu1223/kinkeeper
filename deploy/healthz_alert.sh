@@ -17,12 +17,16 @@ ENV_FILE="$PROJECT_DIR/.env"
 if [ -f "$ENV_FILE" ]; then
   set -a
   # shellcheck disable=SC1090
-  source <(grep -E '^(TELEGRAM_BOT_TOKEN|GROUP_CHAT_ID)=' "$ENV_FILE")
+  source <(grep -E '^(TELEGRAM_BOT_TOKEN|GROUP_CHAT_ID|ADMIN_CHAT_ID)=' "$ENV_FILE")
   set +a
 fi
 
-if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${GROUP_CHAT_ID:-}" ]; then
-  echo "❌ TELEGRAM_BOT_TOKEN/GROUP_CHAT_ID가 설정되지 않았습니다 ($ENV_FILE)" >&2
+# 운영 경보는 가족방이 아니라 관리자 개인 DM으로 보낸다(ADMIN_CHAT_ID).
+# 미설정 시 GROUP_CHAT_ID로 폴백해 경보 자체가 끊기지는 않게 한다.
+ALERT_CHAT_ID="${ADMIN_CHAT_ID:-${GROUP_CHAT_ID:-}}"
+
+if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "$ALERT_CHAT_ID" ]; then
+  echo "❌ TELEGRAM_BOT_TOKEN/ADMIN_CHAT_ID(또는 GROUP_CHAT_ID)가 설정되지 않았습니다 ($ENV_FILE)" >&2
   exit 1
 fi
 
@@ -47,7 +51,7 @@ send_telegram() {
   # 전송 실패가 스크립트를 중단시키지 않도록 실패를 삼킨다(다음 회차에 재시도).
   curl -sf -o /dev/null --max-time 10 \
     -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${GROUP_CHAT_ID}" \
+    --data-urlencode "chat_id=${ALERT_CHAT_ID}" \
     --data-urlencode "text=$1" \
     || echo "⚠️ 텔레그램 경보 전송 실패" >&2
 }
