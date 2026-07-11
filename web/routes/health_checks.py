@@ -9,7 +9,13 @@ from shared.dates import replace_year
 from shared.db import get_session
 from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
 from web.auth import verify_admin
-from web.form_utils import parse_optional_int, parse_required_date
+from web.form_utils import (
+    parse_checkbox,
+    parse_optional_int,
+    parse_required_date,
+    require_max_length,
+    require_range,
+)
 from web.templating import templates
 
 router = APIRouter(prefix="/health", dependencies=[Depends(verify_admin)])
@@ -44,14 +50,16 @@ def create_type(
     active: str = Form(""),
 ) -> RedirectResponse:
     min_age = parse_optional_int(min_age_str, "최소 나이")
+    check_name = require_max_length(name.strip(), "항목명", 100)
+    period = require_range(period_years, "검진 주기(년)", 1, 50)
     with get_session() as session:
         session.add(
             HealthCheckType(
-                name=name.strip(),
-                period_years=period_years,
+                name=check_name,
+                period_years=period,
                 gender=gender if gender in ("M", "F") else None,
                 min_age=min_age,
-                active=bool(active),
+                active=parse_checkbox(active),
             )
         )
     return RedirectResponse("/health", status_code=303)
@@ -77,16 +85,18 @@ def update_type(
     active: str = Form(""),
 ) -> RedirectResponse:
     min_age = parse_optional_int(min_age_str, "최소 나이")
+    check_name = require_max_length(name.strip(), "항목명", 100)
+    period = require_range(period_years, "검진 주기(년)", 1, 50)
     with get_session() as session:
         ct = session.get(HealthCheckType, type_id)
         # 없는 id에 대한 조용한 no-op 대신 404로 알린다 (audit #61).
         if ct is None:
             raise HTTPException(status_code=404, detail="검진 항목을 찾을 수 없습니다.")
-        ct.name = name.strip()
-        ct.period_years = period_years
+        ct.name = check_name
+        ct.period_years = period
         ct.gender = gender if gender in ("M", "F") else None
         ct.min_age = min_age
-        ct.active = bool(active)
+        ct.active = parse_checkbox(active)
     return RedirectResponse("/health", status_code=303)
 
 
@@ -188,6 +198,10 @@ def upsert_member_config(
     period_years: str = Form(""),
     active: str = Form(""),
 ) -> RedirectResponse:
+    period: int | None = parse_optional_int(period_years, "주기(년)")
+    if period is not None:
+        period = require_range(period, "주기(년)", 1, 50)
+    is_active = parse_checkbox(active)
     with get_session() as session:
         config = session.scalar(
             select(MemberHealthCheckConfig).where(
@@ -195,8 +209,6 @@ def upsert_member_config(
                 MemberHealthCheckConfig.check_type_id == check_type_id,
             )
         )
-        period: int | None = parse_optional_int(period_years, "주기(년)")
-        is_active = bool(active)
         if config is None:
             session.add(
                 MemberHealthCheckConfig(

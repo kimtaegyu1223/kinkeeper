@@ -8,7 +8,13 @@ from shared.enums import ReminderType
 from shared.generators import _REGISTRY, rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
 from web.auth import verify_admin
-from web.form_utils import parse_int_default, require_range, validate_iso_datetime
+from web.form_utils import (
+    parse_checkbox,
+    parse_int_default,
+    require_max_length,
+    require_range,
+    validate_iso_datetime,
+)
 from web.templating import templates
 
 router = APIRouter(prefix="/rules", dependencies=[Depends(verify_admin)])
@@ -149,11 +155,11 @@ async def create_rule(request: Request, active: str = Form("")) -> RedirectRespo
     form = dict(form_data)
     rule_type = str(form.get("type") or "")
     reminder_type = _parse_rule_type(rule_type)
-    title = str(form.get("title") or "").strip()
+    title = require_max_length(str(form.get("title") or "").strip(), "규칙 이름", 200)
     config, leads = _build_config_and_leads(rule_type, {k: str(v) for k, v in form.items()})
     _validate_rule_target(rule_type, config)
 
-    is_active = bool(active)
+    is_active = parse_checkbox(active)
     with get_session() as session:
         rule = ReminderRule(
             type=reminder_type,
@@ -188,11 +194,11 @@ async def update_rule(rule_id: int, request: Request, active: str = Form("")) ->
     form = dict(form_data)
     rule_type = str(form.get("type") or "")
     reminder_type = _parse_rule_type(rule_type)
-    title = str(form.get("title") or "").strip()
+    title = require_max_length(str(form.get("title") or "").strip(), "규칙 이름", 200)
     config, leads = _build_config_and_leads(rule_type, {k: str(v) for k, v in form.items()})
     _validate_rule_target(rule_type, config)
 
-    is_active = bool(active)
+    is_active = parse_checkbox(active)
     with get_session() as session:
         rule = session.get(ReminderRule, rule_id)
         # 없는 id에 대한 조용한 no-op 대신 404로 알린다 (audit #61).

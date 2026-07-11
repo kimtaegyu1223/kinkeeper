@@ -9,7 +9,13 @@ from shared.enums import ReminderType
 from shared.generators import rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
 from web.auth import verify_admin
-from web.form_utils import parse_int_default, parse_optional_date, parse_optional_int
+from web.form_utils import (
+    parse_checkbox,
+    parse_int_default,
+    parse_optional_date,
+    parse_optional_int,
+    require_max_length,
+)
 from web.templating import templates
 
 router = APIRouter(prefix="/members", dependencies=[Depends(verify_admin)])
@@ -117,12 +123,12 @@ def create_member(
 ) -> RedirectResponse:
     with get_session() as session:
         member = FamilyMember(
-            name=name.strip(),
+            name=require_max_length(name.strip(), "이름", 50),
             telegram_user_id=parse_optional_int(telegram_user_id, "텔레그램 사용자 ID"),
             birthday_solar=parse_optional_date(birthday_solar, "양력 생일"),
             birthday_lunar=_parse_lunar(birthday_lunar_month, birthday_lunar_day),
             gender=_parse_gender(gender),
-            active=bool(active),
+            active=parse_checkbox(active),
         )
         session.add(member)
         session.flush()
@@ -162,12 +168,12 @@ def update_member(
         # 없는 id에 대한 조용한 no-op 대신 404로 알린다 (audit #61).
         if member is None:
             raise HTTPException(status_code=404, detail="구성원을 찾을 수 없습니다.")
-        member.name = name.strip()
+        member.name = require_max_length(name.strip(), "이름", 50)
         member.telegram_user_id = parse_optional_int(telegram_user_id, "텔레그램 사용자 ID")
         member.birthday_solar = parse_optional_date(birthday_solar, "양력 생일")
         member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
         member.gender = _parse_gender(gender)
-        member.active = bool(active)
+        member.active = parse_checkbox(active)
         rule = _ensure_birthday_rule(session, member)
         if rule:
             session.flush()

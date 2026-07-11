@@ -1,4 +1,5 @@
-"""웹 폼 검증·CSRF·2/29 회귀 테스트 (audit #18, #25, #37, #45, #46, #47, #58, #59, #61, #62).
+"""웹 폼 검증·CSRF·2/29 회귀 테스트 (audit #18, #25, #37, #45, #46, #47, #58, #59, #61, #62,
+#77, #78, #79).
 
 - #18/#59: 규칙 폼의 hour 범위·run_at 형식·알 수 없는 type이 500 대신 400.
 - #25: 2/29 검진 기록이 있어도 검진 페이지가 500 없이 렌더된다(2/28 폴백).
@@ -8,6 +9,9 @@
 - #47: 잘못된 telegram_user_id/중복 telegram_user_id가 500 대신 400.
 - #58: _parse_int_list가 '--3','²' 같은 토큰을 무시하고 crash하지 않는다.
 - #61: 없는 id 조회/수정이 404.
+- #77: name/title/검진 주기가 DB 컬럼 길이·합리적 범위를 넘으면 500(DataError) 대신 400.
+- #78: active 체크박스가 bool(str) 오판정("false" 문자열도 True) 없이 파싱된다.
+- #79: 공지 메시지가 텔레그램 한도(4096자)를 넘으면 500 대신 400.
 
 라우트는 shared.db.get_session(전역 엔진)을 쓰므로 테스트 컨테이너 엔진으로
 monkeypatch한다(test_rules.py 패턴 재사용).
@@ -35,6 +39,7 @@ from shared.models import (
     ScheduledNotification,
 )
 from web.auth import verify_admin
+from web.form_utils import parse_checkbox
 from web.main import app
 from web.routes.rules import _parse_int_list
 
@@ -74,7 +79,23 @@ def client(db_engine, monkeypatch):
         s.query(FamilyMember).delete()
 
 
-# ── members (#45, #47, #61) ──────────────────────────────────────
+# ── form_utils 헬퍼 (#77, #78) ────────────────────────────────────
+
+
+def test_parse_checkbox_values() -> None:
+    """"on"/"1"/"true"(대소문자 무관)만 True, 그 외(특히 "false"/"0")는 False (audit #78)."""
+    assert parse_checkbox("on") is True
+    assert parse_checkbox("1") is True
+    assert parse_checkbox("true") is True
+    assert parse_checkbox("True") is True
+    assert parse_checkbox(" ON ") is True
+    assert parse_checkbox("false") is False
+    assert parse_checkbox("0") is False
+    assert parse_checkbox("") is False
+    assert parse_checkbox(None) is False
+
+
+# ── members (#45, #47, #61, #77, #78) ─────────────────────────────
 
 
 def test_bad_telegram_user_id_returns_400(client) -> None:
@@ -88,6 +109,46 @@ def test_bad_telegram_user_id_returns_400(client) -> None:
     assert resp.status_code == 400
     with Session() as s:
         assert s.query(FamilyMember).count() == 0
+
+
+def test_member_name_too_long_returns_400(client) -> None:
+    """50자(FamilyMember.name 컬럼 길이)를 넘는 이름은 500(DataError) 대신 400 (audit #77)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/members/new",
+        data={"name": "가" * 51, "active": "on"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(FamilyMember).count() == 0
+
+
+def test_member_name_at_limit_accepted(client) -> None:
+    """정확히 50자는 허용된다 (audit #77)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/members/new",
+        data={"name": "가" * 50, "active": "on"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with Session() as s:
+        assert s.query(FamilyMember).filter(FamilyMember.name == "가" * 50).count() == 1
+
+
+def test_member_active_false_string_deactivates(client) -> None:
+    """active="false" 문자열이 bool("false")=True 버그 없이 비활성 저장된다 (audit #78)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/members/new",
+        data={"name": "체크박스멤버", "active": "false"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with Session() as s:
+        member = s.query(FamilyMember).filter(FamilyMember.name == "체크박스멤버").one()
+        assert member.active is False
 
 
 def test_duplicate_telegram_user_id_returns_400(client) -> None:
@@ -154,7 +215,7 @@ def test_edit_missing_member_returns_404(client) -> None:
     assert resp.status_code == 404
 
 
-# ── rules (#18, #58, #59, #61) ───────────────────────────────────
+# ── rules (#18, #58, #59, #61, #77, #78) ──────────────────────────
 
 
 def test_bad_rule_hour_returns_400(client) -> None:
@@ -209,13 +270,47 @@ def test_edit_missing_rule_returns_404(client) -> None:
     assert test_client.get("/rules/999/edit").status_code == 404
 
 
+def test_rule_title_too_long_returns_400(client) -> None:
+    """200자(ReminderRule.title 컬럼 길이)를 넘는 규칙 이름은 500 대신 400 (audit #77)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/rules/new",
+        data={"type": "custom", "title": "x" * 201},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(ReminderRule).count() == 0
+
+
+def test_rule_active_false_string_deactivates(client) -> None:
+    """규칙 active="false" 문자열이 bool() 오판정 없이 비활성으로 저장된다 (audit #78)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/rules/new",
+        data={
+            "type": "custom",
+            "title": "체크박스규칙",
+            "active": "false",
+            "custom_repeat": "once",
+            "custom_message": "안녕",
+            "custom_run_at": "",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with Session() as s:
+        rule = s.query(ReminderRule).filter(ReminderRule.title == "체크박스규칙").one()
+        assert rule.active is False
+
+
 def test_parse_int_list_skips_invalid_tokens() -> None:
     """isdigit()를 통과하던 '--3'/'²' 등이 crash 없이 무시된다 (audit #58)."""
     assert _parse_int_list("7,--3,²,3, ,abc") == [7, 3]
     assert _parse_int_list("14,7,-3,1,0") == [14, 7, -3, 1, 0]
 
 
-# ── health checks (#25, #46, #61) ────────────────────────────────
+# ── health checks (#25, #46, #61, #77, #78) ──────────────────────
 
 
 def _make_member(Session, name: str = "검진이", gender: str | None = None) -> int:
@@ -305,6 +400,104 @@ def test_update_missing_type_returns_404(client) -> None:
     assert resp.status_code == 404
 
 
+def test_health_check_type_name_too_long_returns_400(client) -> None:
+    """100자(HealthCheckType.name 컬럼 길이)를 넘는 항목명은 500 대신 400 (audit #77)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/health/types/new",
+        data={"name": "x" * 101, "period_years": "2"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(HealthCheckType).count() == 0
+
+
+def test_health_check_type_name_at_limit_accepted(client) -> None:
+    """정확히 100자는 허용된다 — name<=50 일괄 적용이 아니라 실제 컬럼 길이(100)를
+    기준으로 삼았음을 고정하는 회귀 테스트다 (audit #77)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/health/types/new",
+        data={"name": "x" * 100, "period_years": "2"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with Session() as s:
+        assert s.query(HealthCheckType).filter(HealthCheckType.name == "x" * 100).count() == 1
+
+
+def test_health_check_type_period_years_out_of_range_returns_400(client) -> None:
+    """검진 주기가 1~50 범위를 벗어나면(0 이하/비정상적으로 큼) 500 대신 400 (audit #77)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/health/types/new",
+        data={"name": "범위밖검진", "period_years": "0"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    resp2 = test_client.post(
+        "/health/types/new",
+        data={"name": "범위밖검진2", "period_years": "999999999"},
+        follow_redirects=False,
+    )
+    assert resp2.status_code == 400
+    with Session() as s:
+        assert s.query(HealthCheckType).count() == 0
+
+
+def test_health_check_type_active_false_string_deactivates(client) -> None:
+    """검진 항목 active="false" 문자열이 bool() 오판정 없이 비활성 저장된다 (audit #78)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/health/types/new",
+        data={"name": "체크박스검진", "period_years": "2", "active": "false"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with Session() as s:
+        ct = s.query(HealthCheckType).filter(HealthCheckType.name == "체크박스검진").one()
+        assert ct.active is False
+
+
+def test_member_health_config_period_years_out_of_range_returns_400(client) -> None:
+    """구성원별 검진 주기 오버라이드도 1~50 범위를 벗어나면 500 대신 400 (audit #77)."""
+    test_client, Session = client
+    member_id = _make_member(Session)
+    type_id = _make_type(Session)
+    resp = test_client.post(
+        f"/health/members/{member_id}/config/{type_id}",
+        data={"period_years": "0"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(MemberHealthCheckConfig).count() == 0
+
+
+def test_member_health_config_active_false_string_deactivates(client) -> None:
+    """구성원별 검진 알림 active="false"가 bool() 오판정 없이 꺼진다 (audit #78)."""
+    test_client, Session = client
+    member_id = _make_member(Session)
+    type_id = _make_type(Session)
+    resp = test_client.post(
+        f"/health/members/{member_id}/config/{type_id}",
+        data={"active": "false"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    with Session() as s:
+        cfg = (
+            s.query(MemberHealthCheckConfig)
+            .filter(
+                MemberHealthCheckConfig.member_id == member_id,
+                MemberHealthCheckConfig.check_type_id == type_id,
+            )
+            .one()
+        )
+        assert cfg.active is False
+
+
 # ── CSRF (#37) ───────────────────────────────────────────────────
 
 
@@ -350,3 +543,31 @@ def test_health_check_rule_type_rejected(client) -> None:
     assert resp.status_code == 400
     with Session() as s:
         assert s.query(ReminderRule).count() == 0
+
+
+# ── broadcast (#79) ────────────────────────────────────────────────
+
+
+def test_broadcast_message_too_long_returns_400(client) -> None:
+    """4096자(텔레그램 메시지 한도)를 넘는 공지는 500 대신 400 (audit #79)."""
+    test_client, Session = client
+    resp = test_client.post(
+        "/broadcast",
+        data={"message": "x" * 4097},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    with Session() as s:
+        assert s.query(ScheduledNotification).count() == 0
+        assert s.query(AdminBroadcast).count() == 0
+
+
+def test_broadcast_message_at_limit_accepted(client) -> None:
+    """정확히 4096자는 허용된다 (audit #79)."""
+    test_client, _ = client
+    resp = test_client.post(
+        "/broadcast",
+        data={"message": "x" * 4096},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200

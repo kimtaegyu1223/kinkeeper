@@ -10,6 +10,7 @@ from shared.db import get_session
 from shared.enums import NotificationStatus
 from shared.models import AdminBroadcast, ScheduledNotification
 from web.auth import verify_admin
+from web.form_utils import require_max_length
 from web.templating import templates
 
 router = APIRouter(prefix="/broadcast", dependencies=[Depends(verify_admin)])
@@ -44,7 +45,7 @@ def send_broadcast(
     admin: str = Depends(verify_admin),
 ) -> HTMLResponse:
     now = datetime.now(UTC)
-    text = message.strip()
+    text = require_max_length(message.strip(), "메시지", 4096)
 
     with get_session() as session:
         # 그룹채널에만 발송. 관리자 자유 입력이므로 escape (parse_mode=HTML 발송)
