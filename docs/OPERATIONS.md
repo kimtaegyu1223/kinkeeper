@@ -64,10 +64,23 @@ curl -i http://127.0.0.1:8000/healthz
 # DB 장애: 503 {"status":"db_error","db":"error"}
 ```
 
-> **모니터 미연결 상태**입니다. `/healthz`는 구현돼 있고 DB 장애 시 503을 정확히
-> 돌려주지만, 현재 이 엔드포인트를 주기적으로 찌르는 외부 모니터(uptime 체커 등)는
-> 붙어 있지 않습니다. 지금은 수동 `curl`이나 로그로 확인합니다.
-> (→ [미결 사항](#미결-사항))
+#### cron 경보 (`deploy/healthz_alert.sh`)
+
+`/healthz` 실패(웹 다운으로 연결 거부 또는 DB 장애로 503)를 감지하면 텔레그램
+그룹으로 경보를 보냅니다. 연속 장애 스팸을 막기 위해 **같은 장애당 1시간에 1회**만
+경보하고(상태파일 쿨다운), 정상으로 돌아오면 **'복구됨' 1회**를 보냅니다. `.env`의
+`TELEGRAM_BOT_TOKEN`/`GROUP_CHAT_ID`를 사용합니다.
+
+```bash
+# 수동 1회 (동작 확인)
+bash deploy/healthz_alert.sh
+
+# 5분마다 자동 (crontab -e)
+*/5 * * * * bash /home/ktg/projects/kinkeeper/deploy/healthz_alert.sh
+```
+
+> 상태파일은 `${XDG_STATE_HOME:-~/.local/state}/kinkeeper/healthz_alert.state`에
+> 저장됩니다. 경보가 반복되면 지우지 말고 원인(웹/DB)을 먼저 확인하세요.
 
 ---
 
@@ -258,4 +271,4 @@ journalctl --user -u kinkeeper-bot --since "03:00" --until "03:10" | grep 재생
 - **다이어트/몸무게 기능의 운명** — 폐기 / 유지(플래그 off) / 활성화(`WEIGHT_FEATURE_ENABLED=true`) 중 무엇으로 확정할지. **주인 결정 대기.**
 - **`SCHEDULE_HORIZON_DAYS` 값** — **결정: 90일(2026-07-11).** 코드 기본값·`.env.example`을 90으로 통일. 운영 `.env`는 배포 때 별도 반영.
 - **음력 윤달·2/30 스키마** — **결정: 해당 가족 없음 확인, 센티널 유지(2026-07-11).** 윤달/음력 2·30 해당자가 생기면 `(월, 일, 윤달)` 3컬럼 전환 필요(현재는 입력 단계에서 거부). 배경은 [ARCHITECTURE 알려진 한계](ARCHITECTURE.md#알려진-한계) 참조.
-- **`/healthz` 모니터 연결** — 503을 감지할 외부 uptime 모니터를 붙일지. **주인 결정 대기.**
+- **`/healthz` 모니터 연결** — **결정: cron 경보(2026-07-11).** 외부 uptime 모니터 대신 `deploy/healthz_alert.sh`를 5분 crontab에 등록해 텔레그램으로 경보(§1 헬스체크 참조).

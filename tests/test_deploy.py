@@ -1,5 +1,7 @@
 """배포 스크립트/유닛 파일 정합성 회귀 테스트 (audit #20, #21, #49, #50, #72, #73)."""
 
+import os
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,3 +87,31 @@ def test_deploy_stops_before_migrate_and_starts_after() -> None:
     assert stop_at < migrate_at < start_at, "stop→migrate→start 순서가 아님"
     # restart는 stop→start 창을 없애므로 파괴적 마이그레이션 배포에서 쓰면 안 된다.
     assert "systemctl --user restart" not in text
+
+
+def test_healthz_alert_exists_and_executable() -> None:
+    """healthz cron 경보 스크립트가 존재하고 실행 권한이 있어야 한다 (2026-07-11 결정)."""
+    script = DEPLOY / "healthz_alert.sh"
+    assert script.is_file()
+    assert os.access(script, os.X_OK), "healthz_alert.sh에 실행 권한이 없음"
+
+
+def test_healthz_alert_syntax_ok() -> None:
+    """bash -n 구문 검사를 통과해야 한다."""
+    result = subprocess.run(
+        ["bash", "-n", str(DEPLOY / "healthz_alert.sh")],
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+
+
+def test_healthz_alert_locks_key_behavior() -> None:
+    """경보 스크립트의 핵심 동작(대상 URL·전송·자격증명·쿨다운·복구)을 잠근다."""
+    text = (DEPLOY / "healthz_alert.sh").read_text()
+    assert "set -euo pipefail" in text
+    assert "127.0.0.1:8000/healthz" in text
+    assert "sendMessage" in text  # 텔레그램 Bot API로 발송
+    assert "TELEGRAM_BOT_TOKEN" in text
+    assert "GROUP_CHAT_ID" in text
+    assert "COOLDOWN=3600" in text  # 같은 장애당 1시간 쿨다운
+    assert "복구됨" in text  # 복구 시 1회 알림
