@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from shared.config_schemas import BirthdayConfig, CustomConfig, HolidayConfig
@@ -10,9 +9,9 @@ from shared.generators import _REGISTRY, rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
 from web.auth import verify_admin
 from web.form_utils import parse_int_default, require_range, validate_iso_datetime
+from web.templating import templates
 
 router = APIRouter(prefix="/rules", dependencies=[Depends(verify_admin)])
-templates = Jinja2Templates(directory="web/templates")
 
 
 def _parse_int_list(raw: str) -> list[int]:

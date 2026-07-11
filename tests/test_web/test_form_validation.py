@@ -312,8 +312,10 @@ def test_update_missing_type_returns_404(client) -> None:
 # ── diet (#62) ───────────────────────────────────────────────────
 
 
-def test_diet_same_name_members_both_shown(client) -> None:
+def test_diet_same_name_members_both_shown(client, monkeypatch) -> None:
     """동명이인 활성 구성원의 다이어트 기록이 모두 표시된다 (audit #62)."""
+    # /diet는 플래그 게이팅되므로 목록을 보려면 기능을 켜야 한다(2026-07-11 유지 결정).
+    monkeypatch.setattr(settings, "weight_feature_enabled", True)
     test_client, Session = client
     with Session() as s:
         m1 = FamilyMember(name="엄마", active=True)

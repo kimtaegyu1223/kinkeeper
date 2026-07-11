@@ -2,7 +2,6 @@ from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -11,9 +10,9 @@ from shared.db import get_session
 from shared.models import FamilyMember, HealthCheckRecord, HealthCheckType, MemberHealthCheckConfig
 from web.auth import verify_admin
 from web.form_utils import parse_optional_int, parse_required_date
+from web.templating import templates
 
 router = APIRouter(prefix="/health", dependencies=[Depends(verify_admin)])
-templates = Jinja2Templates(directory="web/templates")
 
 
 # ── 검진 항목 관리 ─────────────────────────────────────────

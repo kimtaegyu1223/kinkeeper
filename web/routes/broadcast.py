@@ -3,7 +3,6 @@ from html import escape
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from shared.config import settings
@@ -11,9 +10,9 @@ from shared.db import get_session
 from shared.enums import NotificationStatus
 from shared.models import AdminBroadcast, FamilyMember, ScheduledNotification
 from web.auth import verify_admin
+from web.templating import templates
 
 router = APIRouter(prefix="/broadcast", dependencies=[Depends(verify_admin)])
-templates = Jinja2Templates(directory="web/templates")
 
 
 @router.get("", response_class=HTMLResponse)

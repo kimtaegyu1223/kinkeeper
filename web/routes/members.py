@@ -2,7 +2,6 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from shared.db import get_session
@@ -11,9 +10,9 @@ from shared.generators import rebuild_for_rule
 from shared.models import FamilyMember, ReminderRule
 from web.auth import verify_admin
 from web.form_utils import parse_int_default, parse_optional_date, parse_optional_int
+from web.templating import templates
 
 router = APIRouter(prefix="/members", dependencies=[Depends(verify_admin)])
-templates = Jinja2Templates(directory="web/templates")
 
 _DEFAULT_BIRTHDAY_LEADS = [7, 3, 0]
 _DEFAULT_BIRTHDAY_HOUR = 9
