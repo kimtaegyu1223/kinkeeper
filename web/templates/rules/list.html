@@ -1,35 +1,62 @@
 {% extends "base.html" %}
 {% block title %}알림 규칙 — KinKeeper{% endblock %}
+{% set type_meta = {
+  "birthday": ("🎂", "생일"),
+  "holiday":  ("🎊", "명절"),
+  "custom":   ("📅", "커스텀"),
+} %}
 {% block content %}
-<h2>알림 규칙</h2>
-<a href="/rules/new" role="button">+ 규칙 추가</a>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">알림 규칙</h1>
+    <p class="page-subtitle">유형별 자동 알림을 설정합니다</p>
+  </div>
+  <a class="btn btn--secondary" href="/rules/new">+ 추가</a>
+</div>
 
-<table>
-  <thead>
-    <tr>
-      <th>제목</th><th>유형</th><th>리드타임(일)</th><th>상태</th><th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in rules %}
-    <tr>
-      <td>{{ r.title }}</td>
-      <td>{{ r.type }}</td>
-      <td>{{ r.lead_times_days | join(", ") }}</td>
-      <td>{{ "활성" if r.active else "비활성" }}</td>
-      <td>
-        <a href="/rules/{{ r.id }}/edit">수정</a> |
-        <a href="#"
+{% if rules %}
+  {% for type, group in rules | groupby("type.value") %}
+  {% set meta = type_meta.get(type, ("🔔", type)) %}
+  <h2 class="section-title">{{ meta[0] }} {{ meta[1] }}</h2>
+  <div class="card-list">
+    {% for r in group %}
+    <div class="list-row">
+      <div class="list-row__main">
+        <div class="list-row__title">
+          {{ r.title }}
+          {% if r.active %}
+          <span class="badge badge--active">활성</span>
+          {% else %}
+          <span class="badge badge--inactive">비활성</span>
+          {% endif %}
+        </div>
+        <div class="list-row__meta">
+          {% if r.lead_times_days %}
+          알림: {% for d in r.lead_times_days %}{{ "당일" if d == 0 else d ~ "일 전" }}{{ ", " if not loop.last }}{% endfor %}
+          {% else %}
+          알림 시점 미설정
+          {% endif %}
+        </div>
+      </div>
+      <div class="list-row__actions">
+        <a class="btn btn--secondary" href="/rules/{{ r.id }}/edit">수정</a>
+        <a class="btn btn--danger" href="#"
            hx-delete="/rules/{{ r.id }}"
            hx-confirm="정말 삭제하시겠습니까?"
-           hx-target="closest tr"
-           hx-swap="outerHTML"
-           class="danger">삭제</a>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="5">등록된 규칙이 없습니다.</td></tr>
+           hx-target="closest .list-row"
+           hx-swap="outerHTML">삭제</a>
+      </div>
+    </div>
     {% endfor %}
-  </tbody>
-</table>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="card">
+  <div class="empty">
+    <div class="empty__emoji" aria-hidden="true">🔔</div>
+    <p class="empty__text">등록된 알림 규칙이 없습니다.</p>
+    <a class="btn btn--primary" href="/rules/new">첫 규칙 추가</a>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
