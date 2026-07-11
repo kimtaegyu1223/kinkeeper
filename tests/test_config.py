@@ -10,6 +10,8 @@ _VALID = dict(
     telegram_bot_token="123456:TOKEN",
     group_chat_id=-1001234567890,
     tz="Asia/Seoul",
+    database_url="postgresql+psycopg://family:rotated-secret@localhost:5432/family_notifier",
+    admin_password_hash="$2b$12$abcdefghijklmnopqrstuv0123456789ABCDEFGHIJKLMNOPQRS",
 )
 
 
@@ -45,10 +47,44 @@ def test_validate_runtime_rejects_bad_timezone() -> None:
         _settings(tz="Asia/Seoulx").validate_runtime()
 
 
+def test_validate_runtime_rejects_missing_database_url() -> None:
+    """DATABASE_URL 미설정은 운영 DB 오접속·뒤늦은 크래시로 이어지므로 막아야 한다 (audit #67)."""
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        _settings(database_url="").validate_runtime()
+
+
+def test_validate_runtime_rejects_unconfigured_database_url() -> None:
+    """스킴만 있는 미설정 placeholder(클래스 기본값 그대로)도 거부해야 한다 (audit #67)."""
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        _settings(database_url="postgresql+psycopg://").validate_runtime()
+
+
+def test_validate_runtime_rejects_changeme_database_url() -> None:
+    """DATABASE_URL에 기본값(changeme)이 남아 있으면 운영 DB로 오인 접속한다 (audit #67)."""
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        _settings(
+            database_url="postgresql+psycopg://family:changeme@localhost:5432/family_notifier"
+        ).validate_runtime()
+
+
+def test_validate_runtime_rejects_empty_admin_password_hash() -> None:
+    """ADMIN_PASSWORD_HASH가 비어 있으면 관리자 로그인이 원인 불명확 401로만 막힌다 (audit #67)."""
+    with pytest.raises(RuntimeError, match="ADMIN_PASSWORD_HASH"):
+        _settings(admin_password_hash="").validate_runtime()
+
+
 def test_validate_runtime_reports_all_errors_at_once() -> None:
     with pytest.raises(RuntimeError) as exc:
-        _settings(telegram_bot_token="", group_chat_id=0, tz="Bad/Zone").validate_runtime()
+        _settings(
+            telegram_bot_token="",
+            group_chat_id=0,
+            tz="Bad/Zone",
+            database_url="",
+            admin_password_hash="",
+        ).validate_runtime()
     msg = str(exc.value)
     assert "TELEGRAM_BOT_TOKEN" in msg
     assert "GROUP_CHAT_ID" in msg
     assert "TZ=" in msg
+    assert "DATABASE_URL" in msg
+    assert "ADMIN_PASSWORD_HASH" in msg

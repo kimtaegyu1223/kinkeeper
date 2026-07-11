@@ -2,6 +2,7 @@
 # PostgreSQL 일일 백업 — crontab에 등록해서 사용
 # crontab 예시: 0 2 * * * bash /path/to/kinkeeper/deploy/pg_backup.sh
 set -euo pipefail
+umask 077  # 백업 덤프 파일이 생성 시점부터 소유자 전용(600)이 되도록 강제
 
 # .env에서 DB 정보 로드
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
