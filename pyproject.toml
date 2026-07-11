@@ -1,7 +1,7 @@
 [project]
 name = "kinkeeper"
 version = "0.1.0"
-description = "A self-hosted family assistant bot — birthdays, holidays, health check-ups, diet reports, and more via Telegram"
+description = "A self-hosted family assistant bot — birthdays, holidays, health check-ups, and more via Telegram"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -7,7 +7,6 @@
 - `/rules` — 알림 규칙 관리 (생일/명절·기일/커스텀 — 생성 가능 타입은 `_REGISTRY` 기준)
 - `/health-checks` — 건강검진 항목·완료 기록 관리
 - `/broadcast` — 그룹 채널 수동 공지 발송
-- `/diet` — 몸무게 기록 열람 (WEIGHT_FEATURE_ENABLED 활성 시 의미 있음)
 - `/healthz` — DB 연결 확인 (정상 200 / 장애 503)
 
 전체 구조는 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md), 운영은 [docs/OPERATIONS.md](../docs/OPERATIONS.md) 참조.

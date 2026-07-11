@@ -268,7 +268,7 @@ journalctl --user -u kinkeeper-bot --since "03:00" --until "03:10" | grep 재생
 
 주인(운영자 본인) 결정이 필요한 항목. 각 한 줄, **결정 대기**.
 
-- **다이어트/몸무게 기능의 운명** — 폐기 / 유지(플래그 off) / 활성화(`WEIGHT_FEATURE_ENABLED=true`) 중 무엇으로 확정할지. **주인 결정 대기.**
+- **다이어트/몸무게 기능의 운명** — **결정: 폐기(2026-07-11).** 관련 코드·스키마(weight_logs 테이블, `family_members.height_cm`/`diet_active`, `remindertype.diet_report`, `WEIGHT_FEATURE_ENABLED`)를 전량 제거. 마이그레이션 `b8e4f1a7c2d9`로 스키마 드롭(운영 DB에 diet_report 규칙 0건 확인 후 적용).
 - **`SCHEDULE_HORIZON_DAYS` 값** — **결정: 90일(2026-07-11).** 코드 기본값·`.env.example`을 90으로 통일. 운영 `.env`는 배포 때 별도 반영.
 - **음력 윤달·2/30 스키마** — **결정: 해당 가족 없음 확인, 센티널 유지(2026-07-11).** 윤달/음력 2·30 해당자가 생기면 `(월, 일, 윤달)` 3컬럼 전환 필요(현재는 입력 단계에서 거부). 배경은 [ARCHITECTURE 알려진 한계](ARCHITECTURE.md#알려진-한계) 참조.
 - **`/healthz` 모니터 연결** — **결정: cron 경보(2026-07-11).** 외부 uptime 모니터 대신 `deploy/healthz_alert.sh`를 5분 crontab에 등록해 텔레그램으로 경보(§1 헬스체크 참조).
