@@ -1,3 +1,20 @@
+{% set nav_tabs = [
+  ("/", "🏠", "홈"),
+  ("/members", "👪", "가족"),
+  ("/rules", "🔔", "알림"),
+  ("/health", "🩺", "검진"),
+  ("/broadcast", "📢", "공지"),
+] %}
+{% macro render_tabs(path) %}
+  {% for href, icon, label in nav_tabs %}
+    {% set is_active = (href == "/" and path == "/") or (href != "/" and path.startswith(href)) %}
+    <a class="tab{{ ' is-active' if is_active }}" href="{{ href }}"
+       {{ 'aria-current="page"' if is_active }}>
+      <span class="tab__icon" aria-hidden="true">{{ icon }}</span>
+      <span class="tab__label">{{ label }}</span>
+    </a>
+  {% endfor %}
+{% endmacro %}
 <!doctype html>
 <html lang="ko">
   <head>
@@ -6,30 +23,27 @@
     <title>{% block title %}KinKeeper{% endblock %}</title>
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"
     />
+    <link rel="stylesheet" href="/static/app.css" />
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-    <style>
-      nav { margin-bottom: 1rem; }
-      .danger { color: var(--pico-del-color); }
-      .success { color: var(--pico-ins-color); }
-    </style>
   </head>
   <body>
-    <main class="container">
-      <nav>
-        <ul>
-          <li><strong>👨‍👩‍👧‍👦 KinKeeper</strong></li>
-        </ul>
-        <ul>
-          <li><a href="/members">가족 구성원</a></li>
-          <li><a href="/rules">알림 규칙</a></li>
-          <li><a href="/health">🏥 건강검진</a></li>
-          <li><a href="/broadcast">공지 보내기</a></li>
-        </ul>
-      </nav>
+    <header class="app-header">
+      <div class="app-header__inner">
+        <a class="app-header__brand" href="/">KinKeeper</a>
+        <nav class="app-nav" aria-label="주요 메뉴">
+          {{ render_tabs(request.url.path) }}
+        </nav>
+      </div>
+    </header>
 
+    <main class="app-main">
       {% block content %}{% endblock %}
     </main>
+
+    <nav class="tabbar" aria-label="하단 탭">
+      {{ render_tabs(request.url.path) }}
+    </nav>
   </body>
 </html>

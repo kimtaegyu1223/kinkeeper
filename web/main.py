@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 
 from shared.config import settings
@@ -31,6 +32,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="KinKeeper 관리자", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
 app.include_router(members_router)
 app.include_router(rules_router)
