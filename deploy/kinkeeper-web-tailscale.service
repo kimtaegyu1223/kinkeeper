@@ -1,17 +1,23 @@
 # 이 파일은 systemd --user 유닛입니다. deploy/install.sh 가 ~/.config/systemd/user/ 에 설치합니다.
-# 루프백(127.0.0.1:8000)에만 바인딩된 관리자 웹을 tailnet에 HTTPS로 노출한다.
-# 사전에 `tailscale up`으로 인증돼 있어야 하며, LAN(0.0.0.0) 노출 대신 이 경로만 사용한다.
+# 관리자 웹을 tailnet 전용 IP에 바인딩한 별도 uvicorn 인스턴스로 노출한다 (LAN/공인 미노출).
+#
+# 대안(권장, 단일 인스턴스 + 프록시): tailscale serve 프록시로 전환하려면
+#   1) 1회: sudo tailscale set --operator=__USER__
+#   2) ExecStart를 다음으로 교체: /usr/bin/tailscale serve --http=80 http://127.0.0.1:8000
+#      (HTTPS(443)를 쓰려면 관리 콘솔에서 tailnet의 HTTPS 인증서를 먼저 활성화해야 함)
+# 현재는 operator 미설정 환경에서도 동작하도록 직접 바인딩 방식을 사용한다.
 [Unit]
-Description=KinKeeper Admin Web over Tailscale
-After=network-online.target kinkeeper-web.service
+Description=KinKeeper Admin Web (Tailscale)
+After=network-online.target docker.service
 Wants=network-online.target
-Requires=kinkeeper-web.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/tailscale serve --https=443 http://127.0.0.1:8000
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/.venv/bin/uvicorn web.main:app --host 100.101.209.52 --port 8000
 Restart=on-failure
 RestartSec=5
+EnvironmentFile=__PROJECT_DIR__/.env
 
 [Install]
 WantedBy=default.target

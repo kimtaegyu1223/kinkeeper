@@ -35,8 +35,8 @@
 └──────────────────────────────────┘
 
   kinkeeper-web-tailscale
-    tailscale serve --https=443 http://127.0.0.1:8000
-    (루프백 웹을 tailnet에 HTTPS로 노출. kinkeeper-web에 Requires 의존)
+    uvicorn web.main:app --host 100.101.209.52 --port 8000
+    (같은 앱을 tailnet 전용 IP에 바인딩한 별도 인스턴스로 노출)
 ```
 
 - **`kinkeeper-bot`** — `bot/main.py`의 `main()`. structlog(JSON) 설정 →
@@ -47,8 +47,10 @@
   lifespan에서 `settings.validate_runtime()`을 호출합니다. HTTP Basic 인증,
   Sec-Fetch-Site 기반 최소 CSRF 방어, request_id 로깅, `IntegrityError`→400 변환,
   `/healthz`를 포함합니다.
-- **`kinkeeper-web-tailscale`** — 루프백 웹을 tailnet에 노출하는 프록시.
-  `Requires=kinkeeper-web.service`.
+- **`kinkeeper-web-tailscale`** — 같은 앱을 tailnet 전용 IP(100.101.209.52:8000)에
+  바인딩한 별도 uvicorn 인스턴스. LAN·공인망에는 노출하지 않는다.
+  `tailscale serve` 프록시(단일 인스턴스)로 전환하려면 1회성으로
+  `sudo tailscale set --operator=<user>`가 필요 — 유닛 파일 주석 참조.
 - **PostgreSQL** — docker-compose의 `db` 서비스(`postgres:16-alpine`).
   **`127.0.0.1:5432`에만** 포트 매핑, healthcheck는 `pg_isready`.
 
