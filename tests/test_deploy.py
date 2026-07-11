@@ -147,7 +147,7 @@ def test_failed_alert_locks_key_behavior() -> None:
     assert "sendMessage" in text
     assert "TELEGRAM_BOT_TOKEN" in text
     assert "GROUP_CHAT_ID" in text
-    # parse_mode 없이 평문 발송(error의 <,& 등 HTML escape 불필요) — API에 parse_mode 인자를 안 보냄.
+    # parse_mode 없이 평문 발송(<,& 등 HTML escape 불필요) — parse_mode 인자를 안 보냄.
     assert "parse_mode=" not in text
     # 새 실패(id > last_notified_id)일 때만 경보하는 상태 게이팅.
     assert "LAST_NOTIFIED_ID" in text
