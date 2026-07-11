@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ status }} 오류 — KinKeeper{% endblock %}
+{% block content %}
+<div class="card" style="margin-top:24px">
+  <div class="empty">
+    <div class="empty__emoji" aria-hidden="true">{{ emoji }}</div>
+    <p class="empty__text">{{ detail }}</p>
+    <a class="btn btn--primary" href="javascript:history.back()">돌아가기</a>
+  </div>
+</div>
+{% endblock %}

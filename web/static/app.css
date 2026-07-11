@@ -32,6 +32,9 @@
 
   --font: "Pretendard Variable", Pretendard, system-ui, -apple-system,
     "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+
+  /* 다크모드는 이번 스코프 제외 — 폼 컨트롤·스크롤바까지 라이트로 고정한다. */
+  color-scheme: light;
 }
 
 /* ── 리셋/기본 ──────────────────────────────────────────── */
@@ -255,12 +258,14 @@ h3 {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
 
 .list-row__meta {
   margin-top: 2px;
   font-size: var(--fs-sub);
   color: var(--text-sub);
+  overflow-wrap: anywhere;
 }
 
 .list-row__actions {

@@ -5,14 +5,15 @@ request_id 로깅·무결성 오류의 400 변환·시작 시 설정 검증·/he
 """
 
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from shared.config import settings
 from shared.db import check_db_connection
@@ -21,6 +22,7 @@ from web.routes.dashboard import router as dashboard_router
 from web.routes.health_checks import router as health_router
 from web.routes.members import router as members_router
 from web.routes.rules import router as rules_router
+from web.templating import templates
 
 log = structlog.get_logger()
 
@@ -45,6 +47,42 @@ app.include_router(broadcast_router)
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
+# 상태코드별 안내 이모지. 미정의는 ⚠️로 폴백한다.
+_ERROR_EMOJI = {400: "✏️", 401: "🔒", 403: "🚫", 404: "🔍"}
+
+
+def _error_page(
+    request: Request, status: int, detail: str, headers: Mapping[str, str] | None = None
+) -> Response:
+    """오류를 디자인 시스템 카드로 통일 렌더한다 (폼 400 detail 노출 방식 통일).
+
+    HTTPException detail(기존 JSON)과 IntegrityError(기존 평문)를 하나의 스타일드
+    페이지로 합쳐, 사용자가 안내문과 '돌아가기'를 일관되게 보게 한다. 상태코드와
+    헤더(401의 WWW-Authenticate 등)는 보존한다.
+    """
+    resp = templates.TemplateResponse(
+        request,
+        "error.html",
+        {"status": status, "detail": detail, "emoji": _ERROR_EMOJI.get(status, "⚠️")},
+        status_code=status,
+    )
+    if headers:
+        resp.headers.update(headers)
+    return resp
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> Response:
+    """HTTPException(400/401/403/404 등)을 스타일드 오류 페이지로 통일한다.
+
+    폼 검증 실패(form_utils의 400)·미존재 리소스(404)·인증 실패(401)가 모두 같은
+    형태로 노출된다.
+    """
+    detail = (
+        exc.detail if isinstance(exc.detail, str) and exc.detail else "요청을 처리할 수 없습니다."
+    )
+    return _error_page(request, exc.status_code, detail, exc.headers)
+
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: Exception) -> Response:
@@ -53,9 +91,10 @@ async def integrity_error_handler(request: Request, exc: Exception) -> Response:
     예: telegram_user_id/검진 항목명 중복, 같은 검진 기록 중복 제출.
     """
     log.warning("무결성 제약 위반", method=request.method, path=request.url.path)
-    return HTMLResponse(
+    return _error_page(
+        request,
+        400,
         "이미 등록된 값이거나 중복된 데이터입니다. 입력값을 확인해주세요.",
-        status_code=400,
     )
 
 
