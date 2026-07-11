@@ -8,75 +8,84 @@
   </div>
 </div>
 
-{# ── 빠른 액션 ── #}
-<div class="quick-actions">
-  <a class="quick-action" href="/members/new">
-    <span class="quick-action__icon" aria-hidden="true">👪</span>
-    가족 추가
-  </a>
-  <a class="quick-action" href="/rules/new">
-    <span class="quick-action__icon" aria-hidden="true">🔔</span>
-    규칙 추가
-  </a>
-  <a class="quick-action" href="/broadcast">
-    <span class="quick-action__icon" aria-hidden="true">📢</span>
-    공지 보내기
-  </a>
-</div>
+{# 데스크톱(≥1024px)에서 2컬럼: 좌측 타임라인 / 우측 요약·빠른액션.
+   DOM 순서는 모바일 1컬럼 순서(빠른액션→가족요약→타임라인)를 그대로 유지하고,
+   데스크톱 배치는 grid-template-areas(app.css)로만 바꾼다. #}
+<div class="dash">
+  <div class="dash__side">
+    {# ── 빠른 액션 ── #}
+    <div class="quick-actions">
+      <a class="quick-action" href="/members/new">
+        <span class="quick-action__icon" aria-hidden="true">👪</span>
+        가족 추가
+      </a>
+      <a class="quick-action" href="/rules/new">
+        <span class="quick-action__icon" aria-hidden="true">🔔</span>
+        규칙 추가
+      </a>
+      <a class="quick-action" href="/broadcast">
+        <span class="quick-action__icon" aria-hidden="true">📢</span>
+        공지 보내기
+      </a>
+    </div>
 
-{# ── 가족 요약 ── #}
-<h2 class="section-title">가족 요약</h2>
-<div class="stat-grid">
-  <div class="stat">
-    <div class="stat__label">활성 구성원</div>
-    <div class="stat__value">{{ member_count }}<small> 명</small></div>
-  </div>
-  <div class="stat">
-    <div class="stat__label">30일 내 생일</div>
-    <div class="stat__value">{{ upcoming_birthdays | length }}<small> 명</small></div>
-  </div>
-</div>
-
-{% if upcoming_birthdays %}
-<div class="card-list" style="margin-top:12px">
-  {% for b in upcoming_birthdays %}
-  <div class="list-row">
-    <div class="list-row__main">
-      <div class="list-row__title">
-        🎂 {{ b.name }}
-        <span class="badge badge--dday{{ ' is-today' if b.dday == 'D-DAY' }}">{{ b.dday }}</span>
+    {# ── 가족 요약 ── #}
+    <h2 class="section-title">가족 요약</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="stat__label">활성 구성원</div>
+        <div class="stat__value">{{ member_count }}<small> 명</small></div>
       </div>
-      <div class="list-row__meta">{{ b.date.strftime("%m월 %d일") }}</div>
+      <div class="stat">
+        <div class="stat__label">30일 내 생일</div>
+        <div class="stat__value">{{ upcoming_birthdays | length }}<small> 명</small></div>
+      </div>
     </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
 
-{# ── 다가오는 알림 타임라인 ── #}
-<h2 class="section-title">다가오는 알림</h2>
-{% if timeline %}
-  {% for group in timeline %}
-  <div class="timeline__group">
-    <div class="timeline__date">
-      {{ group.date.strftime("%m월 %d일 (%a)") }}
-      <span class="badge badge--dday{{ ' is-today' if group.dday == 'D-DAY' }}">{{ group.dday }}</span>
+    {% if upcoming_birthdays %}
+    <div class="card-list" style="margin-top:12px">
+      {% for b in upcoming_birthdays %}
+      <div class="list-row">
+        <div class="list-row__main">
+          <div class="list-row__title">
+            🎂 {{ b.name }}
+            <span class="badge badge--dday{{ ' is-today' if b.dday == 'D-DAY' }}">{{ b.dday }}</span>
+          </div>
+          <div class="list-row__meta">{{ b.date.strftime("%m월 %d일") }}</div>
+        </div>
+      </div>
+      {% endfor %}
     </div>
-    {% for item in group["items"] %}
-    <div class="timeline__item">
-      <span class="timeline__time">{{ item.time }}</span>
-      <span class="timeline__msg">{{ item.message }}</span>
-    </div>
-    {% endfor %}
+    {% endif %}
   </div>
-  {% endfor %}
-{% else %}
-<div class="card">
-  <div class="empty">
-    <div class="empty__emoji" aria-hidden="true">🗓️</div>
-    <p class="empty__text">향후 30일 내 예정된 알림이 없습니다.</p>
-    <a class="btn btn--primary" href="/rules/new">알림 규칙 추가</a>
+
+  <div class="dash__main">
+    {# ── 다가오는 알림 타임라인 ── #}
+    <h2 class="section-title">다가오는 알림</h2>
+    {% if timeline %}
+      {% for group in timeline %}
+      <div class="timeline__group">
+        <div class="timeline__date">
+          {{ group.date.strftime("%m월 %d일 (%a)") }}
+          <span class="badge badge--dday{{ ' is-today' if group.dday == 'D-DAY' }}">{{ group.dday }}</span>
+        </div>
+        {% for item in group["items"] %}
+        <div class="timeline__item">
+          <span class="timeline__time">{{ item.time }}</span>
+          <span class="timeline__msg">{{ item.message }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    {% else %}
+    <div class="card">
+      <div class="empty">
+        <div class="empty__emoji" aria-hidden="true">🗓️</div>
+        <p class="empty__text">향후 30일 내 예정된 알림이 없습니다.</p>
+        <a class="btn btn--primary" href="/rules/new">알림 규칙 추가</a>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
-{% endif %}
 {% endblock %}

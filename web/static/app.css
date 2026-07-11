@@ -784,6 +784,72 @@ code {
   color: var(--danger);
 }
 
+/* ── 헤더 스크롤 강조 (≥768px, JS가 .is-scrolled 토글) ────── */
+@media (min-width: 768px) {
+  .app-header {
+    transition:
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
+  }
+  /* 최상단에서는 경계선만, 스크롤하면 은은한 그림자로 본문과 분리한다. */
+  .app-header.is-scrolled {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border-bottom-color: transparent;
+  }
+}
+
+/* ── 데스크톱(≥1024px) 1급 레이아웃 ──────────────────────── */
+@media (min-width: 1024px) {
+  :root {
+    --maxw-wide: 960px;
+  }
+
+  /* (1) 본문 폭 확장. 단 직속 폼 화면(추가/수정)은 긴 입력줄을 피해 좁게 유지. */
+  .app-main {
+    max-width: var(--maxw-wide);
+  }
+  .app-main:has(> .form) {
+    max-width: var(--maxw);
+  }
+
+  /* 넓은 페이지(검진 기록·공지)에 얹힌 폼도 입력줄이 과하게 길어지지 않게 폭 제한. */
+  .form {
+    max-width: var(--maxw);
+  }
+
+  /* 헤더 프레임도 넓어진 본문에 맞춘다(브랜드·본문 좌측 정렬 일치). */
+  .app-header__inner {
+    max-width: var(--maxw-wide);
+  }
+
+  /* (3) 목록 정보 밀도 — 넓어진 폭에서 메타를 타이틀 옆 인라인으로. 좁으면 자연 줄바꿈. */
+  .list-row__main {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    column-gap: 12px;
+    row-gap: 2px;
+  }
+  .list-row__meta {
+    margin-top: 0;
+  }
+
+  /* (2) 대시보드 2컬럼 — 좌: 알림 타임라인(넓게) / 우: 요약+빠른액션(고정폭). */
+  .dash {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-areas: "main side";
+    gap: 24px;
+    align-items: start;
+  }
+  .dash__main {
+    grid-area: main;
+  }
+  .dash__side {
+    grid-area: side;
+  }
+}
+
 /* ── 유틸 ───────────────────────────────────────────────── */
 .text-sub {
   color: var(--text-sub);

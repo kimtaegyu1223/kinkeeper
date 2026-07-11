@@ -45,5 +45,18 @@
     <nav class="tabbar" aria-label="하단 탭">
       {{ render_tabs(request.url.path) }}
     </nav>
+
+    {# 데스크톱 스티키 헤더: 스크롤하면 은은한 그림자를 더해 본문과 분리한다. #}
+    <script>
+      (function () {
+        var header = document.querySelector(".app-header");
+        if (!header) return;
+        var sync = function () {
+          header.classList.toggle("is-scrolled", window.scrollY > 4);
+        };
+        sync();
+        window.addEventListener("scroll", sync, { passive: true });
+      })();
+    </script>
   </body>
 </html>
