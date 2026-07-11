@@ -10,13 +10,14 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 
 from shared.config import settings
 from shared.db import check_db_connection
 from web.routes.broadcast import router as broadcast_router
+from web.routes.dashboard import router as dashboard_router
 from web.routes.health_checks import router as health_router
 from web.routes.members import router as members_router
 from web.routes.rules import router as rules_router
@@ -35,6 +36,7 @@ app = FastAPI(title="KinKeeper 관리자", docs_url=None, redoc_url=None, lifesp
 
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
+app.include_router(dashboard_router)
 app.include_router(members_router)
 app.include_router(rules_router)
 app.include_router(health_router)
@@ -88,11 +90,6 @@ async def request_id_middleware(
             status=response.status_code,
         )
         return response
-
-
-@app.get("/", response_class=HTMLResponse)
-def root() -> RedirectResponse:
-    return RedirectResponse("/members")
 
 
 @app.get("/healthz")
