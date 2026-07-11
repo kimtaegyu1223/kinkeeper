@@ -1,6 +1,6 @@
 """관리자 웹 앱 진입점 — 라우터 등록·전역 미들웨어.
 
-FastAPI 앱을 만들고 라우터(구성원/규칙/건강검진/공지/다이어트)를 묶는다. CSRF 최소 방어·
+FastAPI 앱을 만들고 라우터(구성원/규칙/건강검진/공지)를 묶는다. CSRF 최소 방어·
 request_id 로깅·무결성 오류의 400 변환·시작 시 설정 검증·/healthz를 여기서 정의한다.
 """
 
@@ -16,7 +16,6 @@ from sqlalchemy.exc import IntegrityError
 from shared.config import settings
 from shared.db import check_db_connection
 from web.routes.broadcast import router as broadcast_router
-from web.routes.diet import router as diet_router
 from web.routes.health_checks import router as health_router
 from web.routes.members import router as members_router
 from web.routes.rules import router as rules_router
@@ -37,7 +36,6 @@ app.include_router(members_router)
 app.include_router(rules_router)
 app.include_router(health_router)
 app.include_router(broadcast_router)
-app.include_router(diet_router)
 
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}

@@ -41,14 +41,12 @@ def record_handlers(monkeypatch):
         return handler
 
     for name in (
-        "weight_command",
         "upcoming_command",
         "birthday_command",
         "health_status_command",
         "health_done_command",
     ):
         monkeypatch.setattr(botmain, name, make(name))
-    monkeypatch.setattr(botmain.settings, "weight_feature_enabled", True)
     return called
 
 
@@ -74,11 +72,6 @@ async def test_router_leading_space_still_matches(record_handlers) -> None:
     """선행 공백이 있어도 명령이 조용히 무시되면 안 된다 (audit #55)."""
     await botmain._handle_korean_command(_FakeUpdate("   /다음일정"), _FakeContext())
     assert record_handlers == ["upcoming_command"]
-
-
-async def test_router_weight_prefix_false_positive(record_handlers) -> None:
-    await botmain._handle_korean_command(_FakeUpdate("/몸무게측정 어떻게 해"), _FakeContext())
-    assert record_handlers == []
 
 
 # ---------------------------------------------------------------------------

@@ -7,14 +7,13 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from bot.handlers.basic import help_command, start
 from bot.handlers.health import health_done_command, health_status_command
 from bot.handlers.query import birthday_command, upcoming_command
-from bot.handlers.weight import weight_command
 from bot.scheduler import create_scheduler, rebuild_upcoming_async
 from shared.config import settings
 
 log = structlog.get_logger()
 
 
-_KOREAN_COMMANDS = {"/몸무게", "/다음일정", "/내생일", "/내건강검진", "/검진완료"}
+_KOREAN_COMMANDS = {"/다음일정", "/내생일", "/내건강검진", "/검진완료"}
 
 
 async def _handle_korean_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,12 +39,7 @@ async def _handle_korean_command(update: Update, context: ContextTypes.DEFAULT_T
     )
 
     context.args = args
-    if command == "/몸무게":
-        if not settings.weight_feature_enabled:
-            await update.message.reply_text("몸무게 기능은 현재 꺼져 있습니다.")
-            return
-        await weight_command(update, context)
-    elif command == "/다음일정":
+    if command == "/다음일정":
         await upcoming_command(update, context)
     elif command == "/내생일":
         await birthday_command(update, context)

@@ -31,7 +31,7 @@ def generate(rule: ReminderRule, session: Session, horizon_days: int = 60) -> No
         return
 
     member = session.get(FamilyMember, member_id)
-    # 비활성 구성원은 생일 알림 대상에서 제외한다. 다른 소비처(health_check/diet_report/
+    # 비활성 구성원은 생일 알림 대상에서 제외한다. 다른 소비처(health_check/
     # 조회 핸들러)가 모두 active 구성원만 대상으로 하는 것과 일관되게, 규칙이 어떤
     # 경로로 활성 상태가 되든 여기서 최종 방어한다 (audit #57).
     if not member or not member.active:

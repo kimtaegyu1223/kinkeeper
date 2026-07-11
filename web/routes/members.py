@@ -114,8 +114,6 @@ def create_member(
     birthday_lunar_day: str = Form(""),
     gender: str = Form(""),
     active: str = Form(""),
-    height_cm: str = Form(""),
-    diet_active: str = Form(""),
 ) -> RedirectResponse:
     with get_session() as session:
         member = FamilyMember(
@@ -125,8 +123,6 @@ def create_member(
             birthday_lunar=_parse_lunar(birthday_lunar_month, birthday_lunar_day),
             gender=_parse_gender(gender),
             active=bool(active),
-            height_cm=parse_optional_int(height_cm, "키"),
-            diet_active=bool(diet_active),
         )
         session.add(member)
         session.flush()
@@ -160,8 +156,6 @@ def update_member(
     birthday_lunar_day: str = Form(""),
     gender: str = Form(""),
     active: str = Form(""),
-    height_cm: str = Form(""),
-    diet_active: str = Form(""),
 ) -> RedirectResponse:
     with get_session() as session:
         member = session.get(FamilyMember, member_id)
@@ -174,8 +168,6 @@ def update_member(
         member.birthday_lunar = _parse_lunar(birthday_lunar_month, birthday_lunar_day)
         member.gender = _parse_gender(gender)
         member.active = bool(active)
-        member.height_cm = parse_optional_int(height_cm, "키")
-        member.diet_active = bool(diet_active)
         rule = _ensure_birthday_rule(session, member)
         if rule:
             session.flush()

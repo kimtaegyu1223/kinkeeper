@@ -5,16 +5,14 @@ scheduler는 shared.db.get_session(전역 엔진)을 쓰므로, 테스트 컨테
 """
 
 from contextlib import contextmanager
-from datetime import UTC, date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import sessionmaker
 
 import bot.scheduler as sched
-from shared.config import settings
 from shared.enums import NotificationStatus
-from shared.models import FamilyMember, ScheduledNotification, WeightLog
+from shared.models import ScheduledNotification
 
 
 @pytest.fixture
@@ -180,105 +178,8 @@ def test_purge_old_notifications(scheduler_db) -> None:
 
 
 # ---------------------------------------------------------------------------
-# #35 resolve 실패한 BMI placeholder는 원문 발송 대신 취소
-# ---------------------------------------------------------------------------
-
-
-async def test_dispatch_cancels_unresolvable_bmi(scheduler_db, monkeypatch) -> None:
-    """resolve 실패 시 placeholder 원문이 발송되면 안 된다 (audit #35)."""
-    now = datetime.now(UTC)
-    nid = _add(
-        scheduler_db,
-        scheduled_at=now - timedelta(minutes=1),
-        message="__bmi_report__:999",
-        source_key="diet:bmi:999:2026-01-01",
-    )
-
-    sent: list[str] = []
-
-    async def fake_send(chat_id, message):
-        sent.append(message)
-        return True, None
-
-    # diet: 알림은 feature-off 시 먼저 취소되므로, BMI resolve 경로를 타도록 기능을 켠다.
-    monkeypatch.setattr(sched.settings, "weight_feature_enabled", True)
-    monkeypatch.setattr(sched, "send_message", fake_send)
-    monkeypatch.setattr(sched, "_resolve_bmi_message", lambda member_id: None)
-
-    await sched.dispatch_pending()
-
-    assert sent == [], "resolve 실패한 placeholder 원문이 발송됨"
-    assert _status(scheduler_db, nid) == NotificationStatus.cancelled
-
-
-async def test_dispatch_sends_resolved_bmi(scheduler_db, monkeypatch) -> None:
-    """resolve 성공 시 실시간 생성된 메시지가 발송돼야 한다 (audit #35)."""
-    now = datetime.now(UTC)
-    nid = _add(
-        scheduler_db,
-        scheduled_at=now - timedelta(minutes=1),
-        message="__bmi_report__:5",
-        source_key="diet:bmi:5:2026-01-01",
-    )
-
-    sent: list[str] = []
-
-    async def fake_send(chat_id, message):
-        sent.append(message)
-        return True, None
-
-    monkeypatch.setattr(sched.settings, "weight_feature_enabled", True)
-    monkeypatch.setattr(sched, "send_message", fake_send)
-    monkeypatch.setattr(sched, "_resolve_bmi_message", lambda member_id: "📊 BMI 리포트")
-
-    await sched.dispatch_pending()
-
-    assert sent == ["📊 BMI 리포트"]
-    assert _status(scheduler_db, nid) == NotificationStatus.sent
-
-
-# ---------------------------------------------------------------------------
 # #34 스케줄러 misfire_grace_time 설정
 # ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# #31 _has_weight_log_this_week 주 경계를 KST로 계산
-# ---------------------------------------------------------------------------
-
-
-def test_has_weight_log_uses_kst_week_boundary(scheduler_db) -> None:
-    """KST 월요일 새벽(UTC 일요일) 기록도 '이번 주'로 잡혀야 한다 (audit #31)."""
-    tz = ZoneInfo(settings.tz)
-    monday = date(2026, 7, 6)  # 월요일
-
-    with scheduler_db() as s:
-        member = FamilyMember(name="새벽측정", telegram_user_id=7001, height_cm=170)
-        s.add(member)
-        s.commit()
-        mid = member.id
-        # KST 월요일 00:30 기록 = UTC 일요일 15:30. UTC 주 경계로는 '지난주'지만
-        # KST 주 경계로는 이번 주에 속한다.
-        this_week = datetime(2026, 7, 6, 0, 30, tzinfo=tz).astimezone(UTC)
-        # KST 일요일 23:00(= UTC 14:00)은 직전 주라 잡히면 안 된다.
-        prev_week = datetime(2026, 7, 5, 23, 0, tzinfo=tz).astimezone(UTC)
-        s.add(WeightLog(member_id=mid, weight_kg=60.0, recorded_at=prev_week))
-        s.commit()
-
-    try:
-        # 직전 주 기록만 있을 때는 False.
-        assert sched._has_weight_log_this_week(mid, _today=monday) is False
-
-        with scheduler_db() as s:
-            s.add(WeightLog(member_id=mid, weight_kg=61.0, recorded_at=this_week))
-            s.commit()
-
-        assert sched._has_weight_log_this_week(mid, _today=monday) is True
-    finally:
-        with scheduler_db() as s:
-            s.query(WeightLog).filter(WeightLog.member_id == mid).delete()
-            s.query(FamilyMember).filter(FamilyMember.id == mid).delete()
-            s.commit()
 
 
 def test_create_scheduler_sets_misfire_grace_time() -> None:

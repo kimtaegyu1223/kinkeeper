@@ -52,7 +52,7 @@ def upsert_notification_by_key(
     건강검진 리포트처럼 같은 source_key라도 리빌드마다 내용(대상 항목)이 달라질 수
     있으므로, pending이 이미 있으면 scheduled_at/target/message를 갱신한다. 중복 판정과
     갱신은 부분 유니크 인덱스(uq_sched_notif_source_pending)에 위임하며, 이 하나의
-    upsert 규칙을 rule 없는 모든 알림(건강검진·다이어트)이 공유한다 (audit #26).
+    upsert 규칙을 rule 없는 모든 알림(건강검진)이 공유한다 (audit #26).
     """
     stmt = pg_insert(ScheduledNotification).values(
         rule_id=None,

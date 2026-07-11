@@ -53,16 +53,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "",
         "/start — 시작",
         "/help — 명령어 목록",
+        "/다음일정 [일수] — 예정 알림 확인 (예: /다음일정 60)",
+        "",
+        "일정 추가/수정은 관리자 웹에서 합니다.",
     ]
-    if settings.weight_feature_enabled:
-        commands.append("/몸무게 [숫자] — 몸무게 기록 (예: /몸무게 67.2)")
-    commands.extend(
-        [
-            "/다음일정 [일수] — 예정 알림 확인 (예: /다음일정 60)",
-            "",
-            "일정 추가/수정은 관리자 웹에서 합니다.",
-        ]
-    )
     await update.message.reply_text(
         "\n".join(commands),
         parse_mode="HTML",

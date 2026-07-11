@@ -8,7 +8,6 @@
 - #47: 잘못된 telegram_user_id/중복 telegram_user_id가 500 대신 400.
 - #58: _parse_int_list가 '--3','²' 같은 토큰을 무시하고 crash하지 않는다.
 - #61: 없는 id 조회/수정이 404.
-- #62: 동명이인 활성 구성원의 다이어트 기록이 모두 표시된다.
 
 라우트는 shared.db.get_session(전역 엔진)을 쓰므로 테스트 컨테이너 엔진으로
 monkeypatch한다(test_rules.py 패턴 재사용).
@@ -22,7 +21,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 import web.routes.broadcast as broadcast_route
-import web.routes.diet as diet_route
 import web.routes.health_checks as health_route
 import web.routes.members as members_route
 import web.routes.rules as rules_route
@@ -35,7 +33,6 @@ from shared.models import (
     MemberHealthCheckConfig,
     ReminderRule,
     ScheduledNotification,
-    WeightLog,
 )
 from web.auth import verify_admin
 from web.main import app
@@ -58,7 +55,7 @@ def client(db_engine, monkeypatch):
         finally:
             s.close()
 
-    for mod in (members_route, rules_route, health_route, diet_route, broadcast_route):
+    for mod in (members_route, rules_route, health_route, broadcast_route):
         monkeypatch.setattr(mod, "get_session", _get_session)
     monkeypatch.setattr(settings, "group_chat_id", -1001234567890)
     app.dependency_overrides[verify_admin] = lambda: "admin"
@@ -70,7 +67,6 @@ def client(db_engine, monkeypatch):
     with _get_session() as s:
         s.query(ScheduledNotification).delete()
         s.query(AdminBroadcast).delete()
-        s.query(WeightLog).delete()
         s.query(HealthCheckRecord).delete()
         s.query(MemberHealthCheckConfig).delete()
         s.query(HealthCheckType).delete()
@@ -309,30 +305,6 @@ def test_update_missing_type_returns_404(client) -> None:
     assert resp.status_code == 404
 
 
-# ── diet (#62) ───────────────────────────────────────────────────
-
-
-def test_diet_same_name_members_both_shown(client, monkeypatch) -> None:
-    """동명이인 활성 구성원의 다이어트 기록이 모두 표시된다 (audit #62)."""
-    # /diet는 플래그 게이팅되므로 목록을 보려면 기능을 켜야 한다(2026-07-11 유지 결정).
-    monkeypatch.setattr(settings, "weight_feature_enabled", True)
-    test_client, Session = client
-    with Session() as s:
-        m1 = FamilyMember(name="엄마", active=True)
-        m2 = FamilyMember(name="엄마", active=True)
-        s.add_all([m1, m2])
-        s.flush()
-        s.add(WeightLog(member_id=m1.id, weight_kg=55.5))
-        s.add(WeightLog(member_id=m2.id, weight_kg=66.6))
-        s.commit()
-
-    resp = test_client.get("/diet")
-    assert resp.status_code == 200
-    # 두 구성원의 몸무게가 모두 나타나야 한다(이름 키 충돌로 하나가 사라지면 실패).
-    assert "55.5" in resp.text
-    assert "66.6" in resp.text
-
-
 # ── CSRF (#37) ───────────────────────────────────────────────────
 
 
@@ -373,19 +345,6 @@ def test_health_check_rule_type_rejected(client) -> None:
             "health_member_id": "1",
             "health_anchor_date": "2026-01-10",
         },
-        follow_redirects=False,
-    )
-    assert resp.status_code == 400
-    with Session() as s:
-        assert s.query(ReminderRule).count() == 0
-
-
-def test_diet_report_rule_type_rejected(client) -> None:
-    """다이어트 리포트도 규칙으로 저장할 수 없다 — 400, 미저장 (audit #22)."""
-    test_client, Session = client
-    resp = test_client.post(
-        "/rules/new",
-        data={"type": "diet_report", "title": "다이어트 규칙", "diet_cadence": "weekly"},
         follow_redirects=False,
     )
     assert resp.status_code == 400

@@ -43,8 +43,8 @@ def test_ensure_birthday_rule_preserves_custom_settings(db_session) -> None:
     db_session.add(rule)
     db_session.flush()
 
-    # 생일과 무관한 편집(키만 수정) 시뮬레이션
-    member.height_cm = 175
+    # 생일과 무관한 편집(성별만 수정) 시뮬레이션
+    member.gender = "M"
     result = _ensure_birthday_rule(db_session, member)
     db_session.flush()
 

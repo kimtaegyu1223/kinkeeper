@@ -10,7 +10,6 @@ class ReminderType(enum.StrEnum):
     holiday = "holiday"
     health_check = "health_check"
     custom = "custom"
-    diet_report = "diet_report"
 
 
 class NotificationStatus(enum.StrEnum):

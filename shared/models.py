@@ -10,7 +10,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -41,17 +40,10 @@ class FamilyMember(Base):
     birthday_lunar: Mapped[date | None] = mapped_column(nullable=True)
     gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # M, F, None=미설정
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 키 (cm)
-    diet_active: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=text("false"), nullable=False
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    weight_logs: Mapped[list["WeightLog"]] = relationship(
-        back_populates="member", cascade="all, delete-orphan", passive_deletes=True
-    )
     health_records: Mapped[list["HealthCheckRecord"]] = relationship(
         back_populates="member", cascade="all, delete-orphan", passive_deletes=True
     )
@@ -61,7 +53,7 @@ class FamilyMember(Base):
 
 
 class ReminderRule(Base):
-    """알림 규칙 — 생일/명절/건강검진/커스텀/다이어트리포트."""
+    """알림 규칙 — 생일/명절/건강검진/커스텀."""
 
     __tablename__ = "reminder_rules"
 
@@ -130,24 +122,6 @@ class ScheduledNotification(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     rule: Mapped[ReminderRule | None] = relationship(back_populates="notifications")
-
-
-class WeightLog(Base):
-    """가족 구성원 몸무게 기록."""
-
-    __tablename__ = "weight_logs"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    member_id: Mapped[int] = mapped_column(
-        ForeignKey("family_members.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    recorded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    weight_kg: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    note: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    member: Mapped[FamilyMember] = relationship(back_populates="weight_logs")
 
 
 class AdminBroadcast(Base):

@@ -94,13 +94,13 @@ def _parse_rule_type(rule_type: str) -> ReminderType:
     except ValueError:
         raise HTTPException(status_code=400, detail="알 수 없는 규칙 유형입니다.") from None
     # '규칙 생성 가능 타입'의 단일 출처는 _REGISTRY(등록 생성기가 있는 타입)다.
-    # 건강검진·다이어트 리포트는 _REGISTRY에 없고 전용 생성기
-    # (rebuild_health_checks/rebuild_diet_reports)가 규칙과 무관하게 자동 발송하므로
-    # 규칙으로 저장해도 조용히 무동작한다(유령 UI). 저장을 거부한다 (audit #10/#22).
+    # 건강검진은 _REGISTRY에 없고 전용 생성기(rebuild_health_checks)가 규칙과 무관하게
+    # 자동 발송하므로 규칙으로 저장해도 조용히 무동작한다(유령 UI). 저장을 거부한다
+    # (audit #10/#22).
     if parsed not in _REGISTRY:
         raise HTTPException(
             status_code=400,
-            detail="건강검진·다이어트 리포트는 규칙으로 설정하지 않습니다(자동 발송됩니다).",
+            detail="건강검진은 규칙으로 설정하지 않습니다(자동 발송됩니다).",
         )
     return parsed
 

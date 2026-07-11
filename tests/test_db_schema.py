@@ -5,7 +5,6 @@ from shared.models import (
     FamilyMember,
     ReminderRule,
     ScheduledNotification,
-    WeightLog,
 )
 
 
@@ -17,23 +16,9 @@ def test_all_tables_exist(db_engine) -> None:
         FamilyMember.__tablename__,
         ReminderRule.__tablename__,
         ScheduledNotification.__tablename__,
-        WeightLog.__tablename__,
         AdminBroadcast.__tablename__,
     }
     assert expected.issubset(tables)
-
-
-def test_diet_active_has_server_default(db_engine) -> None:
-    """diet_active의 server_default가 마이그레이션과 일치해야 함 (audit #70).
-
-    모델에 server_default가 없으면 create_all 스키마엔 DEFAULT가 없어 마이그레이션 기반
-    운영 DB와 드리프트가 나고, diet_active를 생략한 raw INSERT가 NOT NULL 위반으로 실패한다.
-    """
-    inspector = inspect(db_engine)
-    columns = {c["name"]: c for c in inspector.get_columns("family_members")}
-    default = columns["diet_active"]["default"]
-    assert default is not None
-    assert "false" in default.lower()
 
 
 def test_insert_family_member(db_session) -> None:

@@ -31,7 +31,6 @@ class Settings(BaseSettings):
     tz: str = "Asia/Seoul"
     log_level: str = "INFO"
     schedule_horizon_days: int = 90
-    weight_feature_enabled: bool = False
 
     def validate_runtime(self) -> None:
         """프로세스 시작 시 호출 — 필수 설정 누락/오류면 명확한 에러로 즉시 중단한다.
